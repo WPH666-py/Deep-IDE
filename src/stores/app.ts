@@ -1,0 +1,297 @@
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import { tauriAPI, type ModeInfo, type Message, type AgentDef, type FileEntry } from "../services/tauri-api";
+import type { EditorTheme } from "../utils/codemirror";
+
+export const useAppStore = defineStore("app", () => {
+  const currentProject = ref<string | null>(null);
+  const currentMode = ref<string>("deep-anth");
+  const currentAgent = ref<string>(""); // "" = 无 Agent
+  const apiKey = ref<string>("");
+  const baseUrl = ref<string>("https://api.deepseek.com");
+  const model = ref<string>("deepseek-chat");
+  const editorTheme = ref<EditorTheme>((localStorage.getItem("editorTheme") as EditorTheme) || "classic");
+
+  // Persona 信息
+  const personaInfo = ref<ModeInfo | null>(null);
+  const personaLoading = ref(false);
+
+  // Agent 列表
+  const agents = ref<AgentDef[]>([]);
+
+  // AI 对话
+  const messages = ref<Message[]>([]);
+  const isLoading = ref(false);
+  const totalTokens = ref(0);
+  const streamingContent = ref("");  // 流式响应当前累积内容
+
+  // Agent Loop 工具调用追踪
+  const toolCalls = ref<Array<{
+    id: string;
+    name: string;
+    arguments: any;
+    success?: boolean;
+    output?: string;
+    status: "pending" | "running" | "done" | "error";
+  }>>([]);
+  const agentIterations = ref(0);
+  const agentMaxIterations = ref(0);
+  const useTools = ref<boolean>(true); // 是否启用工具调用（Claude Code 模式）
+
+  // 文件树
+  const fileTree = ref<FileEntry[]>([]);
+  const fileTreePath = ref<string>("");
+  const selectedFile = ref<string>("");
+
+  const displayMessages = computed(() => messages.value);
+
+  // ─── 项目 ───
+  function setProject(path: string) { currentProject.value = path; }
+  async function openProject(path: string) {
+    await tauriAPI.openProject(path);
+    currentProject.value = path;
+  }
+  function closeProject() { currentProject.value = null; }
+
+  // ─── 文件 ───
+  async function loadFileTree(path: string) {
+    try {
+      const result = await tauriAPI.listDirectory(path, 3);
+      fileTree.value = result.entries;
+      fileTreePath.value = result.path;
+    } catch (e: any) {
+      console.error("Failed to load file tree:", e);
+    }
+  }
+
+  // ─── AI 模式 ───
+  async function switchMode(mode: string) {
+    currentMode.value = mode;
+    personaLoading.value = true;
+    try {
+      personaInfo.value = await tauriAPI.switchAIMode(mode);
+    } catch (e: any) {
+      addSystemMessage(`模式切换失败: ${e}`);
+    } finally {
+      personaLoading.value = false;
+    }
+  }
+
+  async function loadAgents() {
+    try { agents.value = await tauriAPI.listAgents(); }
+    catch (e: any) { console.error("Failed to load agents:", e); }
+  }
+
+  async function configureApiKey(key: string) {
+    apiKey.value = key;
+    try {
+      await tauriAPI.configureDeepSeek(key, baseUrl.value, model.value);
+      addSystemMessage("DeepSeek API 连接成功");
+    } catch (e: any) {
+      addSystemMessage(`API 配置失败: ${e}`);
+    }
+  }
+
+  // ─── 发送消息（流式）───
+  async function sendMessageStream(content: string, contextPaths: string[] = []) {
+    if (!content.trim()) return;
+    if (!apiKey.value) {
+      addSystemMessage("请先配置 DeepSeek API Key");
+      return;
+    }
+
+    messages.value.push({ role: "user", content, type: "user" });
+    isLoading.value = true;
+    streamingContent.value = "";
+    const history = messages.value.filter(m => m.role !== "system");
+
+    // 添加占位消息，用于流式更新
+    messages.value.push({ role: "assistant", content: "", type: "assistant" });
+    const msgIndex = messages.value.length - 1;
+
+    try {
+      await tauriAPI.sendAIMessageStream(currentMode.value, content, history, contextPaths);
+      // 流式 completion 后，content 从 event 中积累
+      messages.value[msgIndex].content = streamingContent.value;
+    } catch (e: any) {
+      messages.value[msgIndex].content = `错误: ${e}`;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // ─── 发送消息（带 9 个工具的 Agent Loop）───
+  async function sendMessageWithTools(content: string, contextPaths: string[] = [], workingDir?: string) {
+    if (!content.trim()) return;
+    if (!apiKey.value) {
+      addSystemMessage("请先配置 DeepSeek API Key");
+      return;
+    }
+
+    messages.value.push({ role: "user", content, type: "user" });
+    isLoading.value = true;
+    streamingContent.value = "";
+    toolCalls.value = [];
+    agentIterations.value = 0;
+    agentMaxIterations.value = 0;
+    const history = messages.value.filter(m => m.role !== "system");
+
+    // 添加占位消息
+    messages.value.push({ role: "assistant", content: "🛠 工具调用中...\n", type: "assistant" });
+    const msgIndex = messages.value.length - 1;
+    let accumulatedText = "";
+
+    function updateAssistantContent() {
+      messages.value[msgIndex].content = `🛠 [${agentIterations.value}/${agentMaxIterations.value} 步 | 已调 ${toolCalls.value.length} 个工具]\n\n${accumulatedText}`;
+    }
+
+    // 非代码生成请求：要求 AI 把结果写成 Markdown 文件
+    const codeGenPatterns = [
+      /代码/, /code/, /python|py\b/, /javascript|js\b/, /typescript|ts\b/,
+      /\bjava\b/, /c\+\+|cpp/, /rust|go\b|php|ruby|swift|kotlin/,
+      /写.*程序/, /写.*脚本/, /生成.*代码/, /实现.*功能/, /编写/,
+      /函数|class|接口|\bapi\b/, /\bprogram|\bscript/
+    ];
+    const isCodeRequest = codeGenPatterns.some(p => p.test(content.toLowerCase()));
+    const requestContent = isCodeRequest
+      ? content
+      : `${content}\n\n[System] 本次请求不涉及代码生成。请把回答整理成 Markdown 文档并保存到工作区，文件名要反映主题。最终回复中只给出文件路径和简要说明，不要输出大段正文。`;
+
+    try {
+      // 订阅事件，实时更新 toolCalls 状态
+      const { listen } = await import("@tauri-apps/api/event");
+      const unlisten = await listen("ai-agent-event", (event: any) => {
+        const ev = event.payload;
+        if (!ev || !ev.kind) return;
+        const k = ev.kind;
+        if (k.type === "started") {
+          agentMaxIterations.value = k.max_iterations;
+        } else if (k.type === "iteration") {
+          agentIterations.value = k.current;
+          updateAssistantContent();
+        } else if (k.type === "tool_call_requested") {
+          toolCalls.value.push({
+            id: k.id, name: k.name, arguments: k.arguments,
+            status: "running"
+          });
+        } else if (k.type === "tool_call_executed") {
+          const tc = toolCalls.value.find(t => t.id === k.id);
+          if (tc) {
+            tc.success = k.success;
+            tc.output = k.output;
+            tc.status = k.success ? "done" : "error";
+          }
+        } else if (k.type === "assistant_text") {
+          accumulatedText += k.content;
+          updateAssistantContent();
+        } else if (k.type === "done") {
+          messages.value[msgIndex].content = accumulatedText || k.content;
+        } else if (k.type === "error") {
+          messages.value[msgIndex].content = `❌ 错误: ${k.message}`;
+        } else if (k.type === "file_changed") {
+          // 工具改了文件，刷新文件树
+          if (currentProject.value) {
+            loadFileTree(currentProject.value);
+          }
+        }
+      });
+
+      const wd = workingDir || currentProject.value || undefined;
+      const result = await tauriAPI.sendAIMessageWithTools(currentMode.value, requestContent, history, contextPaths, wd);
+      messages.value[msgIndex].content = messages.value[msgIndex].content || result.content;
+      addSystemMessage(`✅ Agent Loop 完成: ${result.total_iterations} 步, ${result.total_tool_calls} 个工具调用`);
+
+      unlisten();
+    } catch (e: any) {
+      messages.value[msgIndex].content = `❌ 错误: ${e}`;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  function appendStreamToken(token: string) {
+    streamingContent.value += token;
+    // 更新最后一条 assistant 消息
+    const msgs = messages.value;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "assistant") {
+        msgs[i].content = streamingContent.value;
+        break;
+      }
+    }
+  }
+
+  // ─── 发送消息（普通 / Agent）───
+  async function sendMessage(content: string, contextPaths: string[] = []) {
+    if (!content.trim()) return;
+    if (!apiKey.value) {
+      addSystemMessage("请先配置 DeepSeek API Key");
+      return;
+    }
+
+    messages.value.push({ role: "user", content, type: "user" });
+    isLoading.value = true;
+
+    try {
+      let resp;
+      const history = messages.value.filter(m => m.role !== "system");
+
+      if (currentAgent.value) {
+        resp = await tauriAPI.sendAgentMessage(currentAgent.value, currentMode.value, content, history);
+      } else {
+        resp = await tauriAPI.sendAIMessage(currentMode.value, content, history, contextPaths);
+      }
+
+      messages.value.push(resp.message);
+      totalTokens.value += resp.usage.total_tokens;
+    } catch (e: any) {
+      messages.value.push({ role: "assistant", content: `错误: ${e}` });
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  function addSystemMessage(content: string) {
+    messages.value.push({ role: "system", content, type: "system" });
+  }
+
+  function clearMessages() {
+    messages.value = [];
+    totalTokens.value = 0;
+  }
+
+  function setEditorTheme(theme: EditorTheme) {
+    editorTheme.value = theme;
+    localStorage.setItem("editorTheme", theme);
+  }
+
+  // ─── 安全检查 ───
+  async function checkSafety(content: string) {
+    try {
+      const results = await tauriAPI.runSafetyCheck(content);
+      for (const r of results) {
+        if (r.triggered) {
+          addSystemMessage(`${r.action === 'block' ? '🚫' : r.action === 'warn' ? '⚠️' : '🔍'} ${r.message}`);
+        }
+      }
+    } catch (e: any) {
+      console.error("Safety check failed:", e);
+    }
+  }
+
+  return {
+    currentProject, currentMode, currentAgent,
+    apiKey, baseUrl, model,
+    personaInfo, personaLoading, agents,
+    messages, isLoading, totalTokens, displayMessages, streamingContent,
+    fileTree, fileTreePath, selectedFile,
+    editorTheme,
+    setProject, openProject, closeProject,
+    loadFileTree,
+    switchMode, loadAgents, configureApiKey,
+    sendMessage, sendMessageStream, sendMessageWithTools, appendStreamToken, addSystemMessage, clearMessages,
+    toolCalls, agentIterations, agentMaxIterations, useTools,
+    setEditorTheme,
+    checkSafety,
+  };
+});

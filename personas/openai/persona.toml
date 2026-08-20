@@ -1,0 +1,24 @@
+[meta]
+name = "DeepOAI"
+provider = "OpenAI"
+emulated_model = "GPT-4o / GPT-4.1"
+version = "1.0.0"
+extraction_date = "2026-07"
+source = "OpenAI Cookbook, GPT-4.1 Prompting Guide, GPT-4 System Card, community patterns"
+
+[characteristics]
+coding_style = "pragmatic"           # 实用主义：快速迭代，功能优先
+review_rigor = "balanced"            # 审查均衡：功能正确性 + 性能 + 可读性
+architecture_first = false           # 代码先行：先快速实现再迭代优化
+safety_strict = false                # 安全适度：信任开发者判断
+preferred_paradigm = "component"     # 组件化：接口清晰、可组合
+over_engineering = "allowed"         # 允许适度过工程：重构、提取模式
+
+[injection]
+system_prompt_weight = 0.5
+coding_style_weight = 0.3
+review_pattern_weight = 0.2
+
+[tags]
+best_for = ["快速原型", "大型重构", "功能迭代", "组件化设计", "多技术栈"]
+not_for = ["安全关键系统", "需要极严格审查的场景"]

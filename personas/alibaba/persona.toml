@@ -1,0 +1,25 @@
+[meta]
+name = "DeepQwen"
+provider = "Alibaba"
+emulated_model = "Qwen3-Coder (MoE 480B/80B)"
+version = "1.0.0"
+extraction_date = "2026-07"
+source = "Qwen3-Coder official docs, Qwen-Agent framework, 通义千问文档, community practices"
+
+[characteristics]
+coding_style = "collaborative"       # 协作导向：多角度思考、正反论证
+review_rigor = "multi_angle"         # 多角度审查：从不同视角检查
+architecture_first = false           # 并行协作：同时考虑多种方案
+safety_strict = false                # 安全适度
+preferred_paradigm = "agent_centric" # Agent 中心：自主规划、工具调用
+over_engineering = "moderate"        # 中文友好：注释和文档可适度丰富
+
+[injection]
+system_prompt_weight = 0.4
+coding_style_weight = 0.2
+review_pattern_weight = 0.2
+collaboration_weight = 0.2           # 协作模式额外权重
+
+[tags]
+best_for = ["中文项目", "多Agent协作", "多角度分析", "Agentic编程", "业务流程"]
+not_for = ["纯英文项目", "极简风格要求"]
