@@ -2,9 +2,9 @@
 
 > 新一代智能体 IDE · Next-Generation Agentic IDE
 > 用最简洁的架构，做最牛逼的产品！— 水哥
-<img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/4653b074-a6d7-41e2-b3aa-b7e7a0333653" />
 
 ---
+<img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/66274499-a98d-489e-a382-01efd73ce014" />
 
 # 一、中文说明（约 2000 字）
 
