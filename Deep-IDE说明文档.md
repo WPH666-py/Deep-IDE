@@ -13,6 +13,8 @@ Deep-IDE 是一款面向现代开发者的新一代智能体集成开发环境�
 
 Deep-IDE 的核心理念是「简洁架构 + 极致体验」。底层采用 Rust 与 Tauri 2 构建，前端使用 Vue 3 与 TypeScript，实现了接近原生的启动速度与极低的内存占用，同时规避了 Electron 类应用常见的体积臃肿与性能损耗问题。无论你是学生、独立开发者还是团队工程师，Deep-IDE 都能在一个窗口内完成从「新建项目 → 编辑代码 → AI 辅助开发 → 运行调试 → 版本提交」的完整闭环。
 
+**开发动机**：作者在实际开发中发现，主流 IDE 要么功能臃肿、要么 AI 能力割裂——用户常常需要在编辑器、AI 对话工具、命令行终端与文件解析工具之间频繁切换，效率低且上下文容易丢失。与此同时，市面上的 AI 编程助手虽多，但大多按模型分别订阅，成本高且风格单一。Deep-IDE 的出发点，就是用「单一 DeepSeek 运行时 + 离线 Persona 注入」的架构，在同一个桌面窗口内整合编辑、AI 辅助、多智能体工具调用、文件运行与版本控制，让不同风格的模型体验可以一键切换、按需定制，同时把使用成本压到最低。
+
 ## 2. 核心特性
 
 - **跨平台桌面应用**：基于 Tauri 2，支持 Windows、macOS 与 Linux，Windows 端提供原生 NSIS 安装包。
@@ -30,6 +32,8 @@ Deep-IDE 的核心理念是「简洁架构 + 极致体验」。底层采用 Rust
 ## 3. 技术架构
 
 Deep-IDE 采用前后端分层架构。前端使用 Vue 3 + TypeScript + Vite 构建，编辑器基于 CodeMirror 6，状态管理使用 Pinia；后端使用 Rust 编写 Tauri 命令，通过 IPC 与前端通信。文件解析模块大量使用纯 Rust 库：Excel 采用 calamine，Word 与 PowerPoint 采用 zip + XML 解析，文本文件直接用 `std::fs` 读取并支持 UTF-8 / UTF-16 / GBK 编码自动识别；PDF 则通过内置的 Python pymupdf 兜底处理。所有子进程均通过 `CREATE_NO_WINDOW` 标志隐藏，避免弹出黑色命令行窗口。
+
+**多模态是怎么支持的**：Deep-IDE 通过统一的文件解析入口实现「多模态上下文」。普通文本与代码文件支持 UTF-8 / UTF-16 / GBK 编码自动识别；Excel 用纯 Rust 库 calamine、Word / PowerPoint 用 zip + XML 提取文本，PDF 则由内置 Python pymupdf 兜底；图片虽不读取像素，但会以「路径 + 格式 + 大小」的占位描述注入上下文供 AI 引用。所有解析结果统一转成结构化文本（含格式名、字节数、是否截断等字段），超过 80KB 的大文件按「首尾各 40KB」截断，再由 Prompt 组装器拼入 System Prompt，让 AI 能"看懂"代码、文档、表格、幻灯片、PDF 等多种格式。
 
 ## 4. 快速开始
 
@@ -51,7 +55,17 @@ Deep-IDE 采用前后端分层架构。前端使用 Vue 3 + TypeScript + Vite �
 
 ### 5.3 AI 助手与多模式
 
-AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi），每种模式通过离线 Persona 注入模拟不同的开发风格：DeepAnth 侧重安全审查与架构先行，DeepOAI 侧重快速迭代与组件化，DeepGem 侧重长上下文全局分析，DeepQwen 侧重中文优化与多角色协作，DeepKimi 侧重逐步推理与任务分解。所有模式统一消耗 DeepSeek Token。
+AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi），每种模式通过离线 Persona 注入模拟不同的开发风格，所有模式统一消耗 DeepSeek Token。
+
+**什么是 Persona 注入**：Persona 注入（Persona Injection）是一种提示工程（Prompt Engineering）方法。Deep-IDE 实际只调用 DeepSeek 这一个真实大模型，但借助本地离线的 Persona 配置——每个模式对应一个目录，内含 `persona.toml` 及多份 Markdown 知识文件——在每次请求前动态组装 System Prompt。Prompt 组装器会按权重把「身份设定、编码风格、审查清单、架构思维、协作模式、任务工作流」等内容注入系统提示词，让同一个底层模型表现出截然不同的"性格"与工作风格。这种注入完全离线，不额外调用其他模型，只消耗 DeepSeek Token。
+
+**五种模式分别对应什么**：
+
+- **DeepAnth** —— 模拟 Anthropic 的 Claude，安全审查极严、架构先行、防御式编码，适合安全审计与复杂重构。
+- **DeepOAI** —— 模拟 OpenAI 的 GPT，快速迭代、实用主义、组件化思维，适合快速原型与功能开发。
+- **DeepGem** —— 模拟 Google 的 Gemini，全局视角、并行分析、长上下文理解，适合大型代码库分析。
+- **DeepQwen** —— 模拟阿里的 Qwen，多角度协作、中文优化、Agent 中心，适合中文项目与多角色协作。
+- **DeepKimi** —— 模拟月之暗面的 Kimi，逐步推理、任务分解、无损长上下文，适合超长文档与结构化分析。
 
 ### 5.4 工具调用 Agent Loop
 
@@ -96,6 +110,8 @@ Deep-IDE is a next-generation agentic integrated development environment (IDE) d
 
 The core philosophy of Deep-IDE is "simple architecture, ultimate experience." The backend is built with Rust and Tauri 2, while the frontend uses Vue 3 and TypeScript, delivering near-native startup speed and extremely low memory footprint, while avoiding the bloated size and performance issues commonly associated with Electron-based applications. Whether you are a student, an independent developer, or a team engineer, Deep-IDE lets you complete the entire workflow — "create a project → edit code → AI-assisted development → run and debug → commit to version control" — all within a single window.
 
+**Development Motivation**: During real-world development, the author observed that mainstream IDEs are either bloated or have fragmented AI capabilities — users often have to switch frequently between an editor, an AI chat tool, a command-line terminal, and a file parsing tool, which is inefficient and prone to losing context. Meanwhile, although there are many AI programming assistants on the market, most require separate subscriptions per model, which is costly and stylistically rigid. The starting point of Deep-IDE was to use a "single DeepSeek runtime + offline Persona injection" architecture to unify editing, AI assistance, multi-agent tool calling, file execution, and version control within a single desktop window — allowing different model experiences to be switched with one click, customized on demand, while keeping usage cost to a minimum.
+
 ## 2. Core Features
 
 - **Cross-platform desktop application**: Built on Tauri 2, supporting Windows, macOS, and Linux, with a native NSIS installer provided for Windows.
@@ -113,6 +129,8 @@ The core philosophy of Deep-IDE is "simple architecture, ultimate experience." T
 ## 3. Technical Architecture
 
 Deep-IDE uses a layered front-end/back-end architecture. The front end is built with Vue 3 + TypeScript + Vite, uses CodeMirror 6 for editing, and Pinia for state management; the back end implements Tauri commands in Rust and communicates with the front end through IPC. The file parsing module makes heavy use of pure Rust libraries: Excel via calamine, Word and PowerPoint via zip + XML parsing, and text files via `std::fs` with automatic UTF-8 / UTF-16 / GBK encoding detection. PDF files are handled by a bundled Python pymupdf fallback. All subprocesses are hidden using the `CREATE_NO_WINDOW` flag to prevent black command-line windows from appearing.
+
+**How multimodal support works**: Deep-IDE implements "multimodal context" through a unified file parsing entry point. Plain-text and code files support automatic UTF-8 / UTF-16 / GBK encoding detection; Excel is parsed with the pure Rust library calamine, Word / PowerPoint via zip + XML text extraction, and PDF through a bundled Python pymupdf fallback. Although images do not have their pixels read, they are injected into the context as a placeholder description of "path + format + size" for the AI to reference. All parsed results are uniformly converted into structured text (including format name, byte count, truncation flag, and other fields); files over 80 KB are truncated to "first and last 40 KB each", and then assembled into the System Prompt by the prompt assembler, allowing the AI to "understand" various formats such as code, documents, spreadsheets, slides, and PDFs.
 
 ## 4. Quick Start
 
@@ -134,7 +152,17 @@ The editor supports multi-tab switching, saving, and save-as. The file tree cont
 
 ### 5.3 AI Assistant and Multiple Modes
 
-The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi). Each mode simulates a different development style through offline Persona injection: DeepAnth emphasizes security review and architecture-first, DeepOAI emphasizes rapid iteration and componentization, DeepGem emphasizes long-context global analysis, DeepQwen emphasizes Chinese optimization and multi-role collaboration, and DeepKimi emphasizes step-by-step reasoning and task decomposition. All modes consume DeepSeek tokens.
+The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi). Each mode simulates a different development style through offline Persona injection, and all modes consume DeepSeek tokens.
+
+**What is Persona injection?** Persona Injection is a prompt engineering method. Deep-IDE actually calls only one real large model — DeepSeek — but relies on local offline Persona configurations (each mode corresponds to a directory containing `persona.toml` plus multiple Markdown knowledge files) to dynamically assemble the System Prompt before every request. The prompt assembler injects "identity setting, coding style, review checklist, architectural thinking, collaboration patterns, and task workflows" into the system prompt according to their weights, making the same underlying model exhibit entirely different "personalities" and working styles. This injection is fully offline, does not call any other model, and only consumes DeepSeek tokens.
+
+**What do the five modes correspond to?**
+
+- **DeepAnth** — Emulates Anthropic's Claude: extremely strict security review, architecture-first, defensive coding; ideal for security audits and complex refactoring.
+- **DeepOAI** — Emulates OpenAI's GPT: rapid iteration, pragmatism, componentized thinking; ideal for quick prototyping and feature development.
+- **DeepGem** — Emulates Google's Gemini: global perspective, parallel analysis, long-context understanding; ideal for large codebase analysis.
+- **DeepQwen** — Emulates Alibaba's Qwen: multi-angle collaboration, Chinese optimization, agent-centric; ideal for Chinese projects and multi-role collaboration.
+- **DeepKimi** — Emulates Moonshot AI's Kimi: step-by-step reasoning, task decomposition, lossless long context; ideal for very long documents and structured analysis.
 
 ### 5.4 Tool Calling Agent Loop
 
