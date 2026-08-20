@@ -59,6 +59,10 @@ AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepK
 
 **什么是 Persona 注入**：Persona 注入（Persona Injection）是一种提示工程（Prompt Engineering）方法。Deep-IDE 实际只调用 DeepSeek 这一个真实大模型，但借助本地离线的 Persona 配置——每个模式对应一个目录，内含 `persona.toml` 及多份 Markdown 知识文件——在每次请求前动态组装 System Prompt。Prompt 组装器会按权重把「身份设定、编码风格、审查清单、架构思维、协作模式、任务工作流」等内容注入系统提示词，让同一个底层模型表现出截然不同的"性格"与工作风格。这种注入完全离线，不额外调用其他模型，只消耗 DeepSeek Token。
 
+<img width="2662" height="1797" alt="image" src="https://github.com/user-attachments/assets/f008ced8-6893-44e3-840b-6a102c0fe87e" />
+<img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/3e3b4406-8ed9-4d2d-ac6e-3abed4940543" />
+<img width="2386" height="1194" alt="image" src="https://github.com/user-attachments/assets/d57e67c0-d201-4f50-a6b9-cb83827356e9" />
+
 **五种模式分别对应什么**：
 
 - **DeepAnth** —— 模拟 Anthropic 的 Claude，安全审查极严、架构先行、防御式编码，适合安全审计与复杂重构。
