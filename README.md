@@ -160,6 +160,10 @@ The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwe
 
 **What is Persona injection?** Persona Injection is a prompt engineering method. Deep-IDE actually calls only one real large model — DeepSeek — but relies on local offline Persona configurations (each mode corresponds to a directory containing `persona.toml` plus multiple Markdown knowledge files) to dynamically assemble the System Prompt before every request. The prompt assembler injects "identity setting, coding style, review checklist, architectural thinking, collaboration patterns, and task workflows" into the system prompt according to their weights, making the same underlying model exhibit entirely different "personalities" and working styles. This injection is fully offline, does not call any other model, and only consumes DeepSeek tokens.
 
+<img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/11baf28c-4c4b-4ba2-8c00-93f1266fc9a6" />
+<img width="2683" height="1796" alt="image" src="https://github.com/user-attachments/assets/d92cbd7a-ef9e-44ff-bb5c-2f88b07d6827" />
+<img width="2387" height="1194" alt="image" src="https://github.com/user-attachments/assets/8a0efb7e-71d5-4fbd-810e-b052758167a3" />
+
 **What do the five modes correspond to?**
 
 - **DeepAnth** — Emulates Anthropic's Claude: extremely strict security review, architecture-first, defensive coding; ideal for security audits and complex refactoring.
