@@ -130,6 +130,13 @@
             <button class="image-preview-close" @click="closeImagePreviewTab" title="关闭预览">×</button>
             <img :src="imagePreviewSrc" alt="预览" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
           </div>
+          <!-- 皮肤立绘：DeepKing 同款，常驻编辑区右侧的陪伴立绘 -->
+          <div v-if="store.activeSkinPortrait" class="editor-companion" :class="{ collapsed: skinPortraitCollapsed }">
+            <button class="companion-toggle" @click="toggleSkinPortrait" :title="skinPortraitCollapsed ? '展开立绘' : '收起立绘'">
+              {{ skinPortraitCollapsed ? '◀' : '▶' }}
+            </button>
+            <img :src="store.activeSkinPortrait" class="companion-img" alt="皮肤立绘" />
+          </div>
         </div>
         <!-- 内置终端面板 -->
         <div class="terminal-panel" id="terminalPanel" v-if="showTerminal">
@@ -159,12 +166,6 @@
         <!-- AI问答区 -->
         <div class="ai-panel-content" :class="{ active: aiTab === 'chat' }" id="aiChatPanel">
           <div class="ai-chat" ref="aiChatRef">
-            <div v-if="store.activeSkinPortrait" class="skin-portrait-wrap">
-              <img v-show="!skinPortraitCollapsed" :src="store.activeSkinPortrait" class="skin-portrait" alt="皮肤立绘" />
-              <button class="skin-portrait-toggle" @click="toggleSkinPortrait">
-                {{ skinPortraitCollapsed ? '▸ 展开立绘' : '▾ 收起立绘' }}
-              </button>
-            </div>
             <div v-if="!store.displayMessages.length && !store.isLoading" class="message ai-message">欢迎使用AI助手！请先在下方选择或配置AI模型。</div>
             <div v-for="(msg, i) in store.displayMessages" :key="i" class="message" :class="msgClass(msg.role)">
               <div class="msg-role">{{ roleLabel(msg.role) }}</div>

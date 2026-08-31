@@ -149,6 +149,8 @@ const GITHUB_DARK_CSS = `
 .tab-close { color:#8b949e; }
 .tab-close:hover { background:#f85149; color:#fff; }
 .editor-main-content { background:#0d1117; }
+.companion-toggle { background:#161b22; border-color:#30363d; color:#8b949e; }
+.companion-toggle:hover { color:#e6edf3; border-color:#58a6ff; }
 .editor-empty-title { color:#c9d1d9; }
 .editor-empty-desc { color:#8b949e; }
 .editor-empty-icon { opacity:.5; }
@@ -360,6 +362,8 @@ const SKIN_TEMPLATE = `
 .tab.active { background: {{bg-base}}; color: {{text}}; border-top:2px solid {{accent}}; }
 .tab-close:hover { background: {{accent}}; color:#fff; }
 .editor-main-content { background: {{bg-base}}; }
+.companion-toggle { background: {{layer2}}; border-color: {{border}}; color: {{muted}}; }
+.companion-toggle:hover { color: {{text}}; border-color: {{accent}}; }
 .editor-empty-title { color: {{muted}}; }
 .editor-empty-desc { color: {{muted}}; }
 .terminal-panel { background: {{bg-base}}; border-top:1px solid {{border}}; }
