@@ -29,7 +29,7 @@
     "active": true,
     "targets": ["nsis"],
     "icon": [
-      "icons/deep-IDE.ico"
+      "icons/deepIDE.ico"
     ],
     "resources": [
       "tools/file-ops/*",
@@ -43,12 +43,13 @@
       "python/Lib/site-packages/pymupdf/*.py",
       "python/Lib/site-packages/pymupdf/*.pyd",
       "python/Lib/site-packages/pymupdf/*.dll",
-      "python/Lib/site-packages/pymupdf/py.typed"
+      "python/Lib/site-packages/pymupdf/py.typed",
+      "../personas"
     ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "installerIcon": "icons/deep-IDE.ico"
+        "installerIcon": "icons/deepIDE.ico"
       }
     }
   }

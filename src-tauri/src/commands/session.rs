@@ -44,6 +44,18 @@ fn ensure_sessions_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// 净化会话 id，只允许字母数字和 -/_，防止路径穿越
+fn sanitize_session_id(id: &str) -> Result<String, String> {
+    let clean: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if clean.is_empty() || clean.len() != id.len() {
+        return Err("Invalid session id".to_string());
+    }
+    Ok(clean)
+}
+
 /// 保存会话
 #[tauri::command]
 pub fn save_session(
@@ -55,6 +67,7 @@ pub fn save_session(
     total_tokens: u32,
 ) -> Result<String, String> {
     let dir = ensure_sessions_dir()?;
+    let id = sanitize_session_id(&id)?;
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
 
     let session = Session {
@@ -80,6 +93,7 @@ pub fn save_session(
 /// 加载会话
 #[tauri::command]
 pub fn load_session(id: String) -> Result<Session, String> {
+    let id = sanitize_session_id(&id)?;
     let dir = get_sessions_dir();
     let file_path = dir.join(format!("{}.json", id));
 
@@ -128,6 +142,7 @@ pub fn list_sessions() -> Result<Vec<SessionMeta>, String> {
 /// 删除会话
 #[tauri::command]
 pub fn delete_session(id: String) -> Result<String, String> {
+    let id = sanitize_session_id(&id)?;
     let dir = get_sessions_dir();
     let file_path = dir.join(format!("{}.json", id));
     fs::remove_file(&file_path).map_err(|e| format!("Delete error: {}", e))?;

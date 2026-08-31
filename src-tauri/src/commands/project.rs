@@ -4,7 +4,17 @@ use std::fs;
 /// 创建新项目
 #[tauri::command]
 pub fn create_project(name: String, path: String) -> Result<String, String> {
-    let project_path = PathBuf::from(&path).join(&name);
+    // 项目名不允许包含路径分隔符或 ..，防止创建到选定目录之外
+    let name = name.trim();
+    if name.is_empty()
+        || name.contains('\\')
+        || name.contains('/')
+        || name.contains("..")
+        || name == "."
+    {
+        return Err("Invalid project name".to_string());
+    }
+    let project_path = PathBuf::from(&path).join(name);
     fs::create_dir_all(&project_path)
         .map_err(|e| format!("Failed to create project: {}", e))?;
 

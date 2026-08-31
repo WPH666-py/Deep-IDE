@@ -235,27 +235,6 @@ impl DeepSeekClient {
             tool_choice: if tools.is_some() { Some("auto".to_string()) } else { None },
         };
 
-        // #region debug-point A:request-body
-        if let Ok(req_json) = serde_json::to_string(&req) {
-            eprintln!("[DEBUG] Request body ({} bytes): {}", req_json.len(), &req_json[..req_json.len().min(2000)]);
-            let debug_url = std::fs::read_to_string(".dbg/ai-400-bad-request.env")
-                .ok()
-                .and_then(|s| s.lines().find(|l| l.starts_with("DEBUG_SERVER_URL=")).map(|l| l[17..].trim().to_string()))
-                .unwrap_or_else(|| "http://127.0.0.1:7777/event".to_string());
-            let _ = self.client.post(&debug_url)
-                .json(&serde_json::json!({
-                    "sessionId": "ai-400-bad-request",
-                    "runId": "post-fix",
-                    "hypothesisId": "A",
-                    "location": "deepseek.rs:240",
-                    "msg": "[DEBUG] Request body preview",
-                    "data": { "request_json": req_json },
-                }))
-                .send()
-                .await;
-        }
-        // #endregion debug-point
-
         let resp = self
             .client
             .post(format!("{}/v1/chat/completions", config.base_url))
@@ -275,7 +254,11 @@ impl DeepSeekClient {
         let body = resp.text().await.map_err(|e| format!("Read response error: {}", e))?;
 
         let chat_resp: ChatResponse = serde_json::from_str(&body)
-            .map_err(|e| format!("Parse error: {} | body: {}", e, &body[..body.len().min(500)]))?;
+            .map_err(|e| {
+                // 按字符边界截断预览，避免 UTF-8 多字节字符中间切片 panic
+                let preview_end = body.char_indices().nth(500).map(|(i, _)| i).unwrap_or(body.len());
+                format!("Parse error: {} | body: {}", e, &body[..preview_end])
+            })?;
 
         Ok(chat_resp)
     }
@@ -343,17 +326,23 @@ impl DeepSeekClient {
 
         let mut stream = resp.bytes_stream();
         let mut full_content = String::new();
+        // 跨 chunk 缓冲：只在拿到完整行后才解码，避免 UTF-8 多字节字符被切碎和行丢失
+        let mut carry: Vec<u8> = Vec::new();
+        let mut done = false;
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| format!("Stream read error: {}", e))?;
-            let text = String::from_utf8_lossy(&chunk);
-            for line in text.lines() {
+            carry.extend_from_slice(&chunk);
+            while let Some(pos) = carry.iter().position(|&b| b == b'\n') {
+                let line_bytes: Vec<u8> = carry.drain(..=pos).collect();
+                let line = String::from_utf8_lossy(&line_bytes);
                 let line = line.trim();
                 if line.is_empty() || !line.starts_with("data: ") {
                     continue;
                 }
                 let data = &line[6..]; // skip "data: "
                 if data == "[DONE]" {
+                    done = true;
                     break;
                 }
                 if let Ok(stream_chunk) = serde_json::from_str::<StreamChunk>(data) {
@@ -365,6 +354,9 @@ impl DeepSeekClient {
                         // 流式 tool_calls 暂不处理（agent_loop 走非流式分支）
                     }
                 }
+            }
+            if done {
+                break;
             }
         }
 

@@ -273,6 +273,16 @@ body {
 .code-editor .cm-editor.dark-theme .cm-activeLineGutter {
     background-color: #313244 !important;
 }
+/* GitHub 深色模式：当前行使用 GitHub 官方深色配色 */
+.code-editor .cm-editor.github-theme .cm-activeLine {
+    background-color: #161b22 !important;
+}
+.code-editor .cm-editor.github-theme .cm-activeLine * {
+    color: #e6edf3 !important;
+}
+.code-editor .cm-editor.github-theme .cm-activeLineGutter {
+    background-color: #21262d !important;
+}
 .code-editor .cm-editor .cm-scroller {
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
     line-height: 1.6;

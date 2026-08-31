@@ -46,6 +46,12 @@ pub fn switch_ai_mode(
         &[],
     );
 
+    let preview_end = assembled
+        .char_indices()
+        .nth(500)
+        .map(|(i, _)| i)
+        .unwrap_or(assembled.len());
+
     Ok(serde_json::json!({
         "mode": mode,
         "name": persona_ctx.persona.meta.name,
@@ -55,7 +61,7 @@ pub fn switch_ai_mode(
         "review_rigor": persona_ctx.persona.characteristics.review_rigor,
         "architecture_first": persona_ctx.persona.characteristics.architecture_first,
         "best_for": persona_ctx.persona.tags.best_for,
-        "system_prompt_preview": &assembled[..std::cmp::min(500, assembled.len())],
+        "system_prompt_preview": &assembled[..preview_end],
     }))
 }
 
@@ -252,27 +258,6 @@ pub async fn send_ai_message_with_tools(
     let ds_for_loop = ds_client.inner().clone();
     let deepseek_arc = Arc::new(ds_for_loop);
 
-    // #region debug-point B:history-types
-    for (i, h) in history.iter().enumerate() {
-        eprintln!("[DEBUG] history[{}]: role={}, type={:?}", i, h.role, h.r#type);
-        let debug_url = std::fs::read_to_string(".dbg/ai-400-bad-request.env")
-            .ok()
-            .and_then(|s| s.lines().find(|l| l.starts_with("DEBUG_SERVER_URL=")).map(|l| l[17..].trim().to_string()))
-            .unwrap_or_else(|| "http://127.0.0.1:7777/event".to_string());
-        let _ = reqwest::Client::new().post(&debug_url)
-            .json(&serde_json::json!({
-                "sessionId": "ai-400-bad-request",
-                "runId": "post-fix",
-                "hypothesisId": "B",
-                "location": "commands/ai.rs:250",
-                "msg": format!("[DEBUG] history[{}] type", i),
-                "data": { "index": i, "role": h.role, "type": h.r#type, "content_len": h.content.len() },
-            }))
-            .send()
-            .await;
-    }
-    // #endregion debug-point
-
     let input = AgentLoopInput {
         mode: mode.clone(),
         user_message: message,
@@ -293,9 +278,6 @@ pub async fn send_ai_message_with_tools(
     }).await?;
 
     // 不返回 events 数组（已通过 Tauri 事件实时推送），只返回摘要
-    // #region debug-point dp-2: 打印最终返回摘要
-    eprintln!("[DEBUG] send_ai_message_with_tools OK: iterations={}, tool_calls={}", output.total_iterations, output.total_tool_calls);
-    // #endregion debug-point
     Ok(serde_json::json!({
         "content": output.final_content,
         "total_iterations": output.total_iterations,

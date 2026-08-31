@@ -1,5 +1,5 @@
 import { EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars, lineNumbers } from "@codemirror/view";
-import { EditorState, StateEffect } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { indentWithTab, history, defaultKeymap, historyKeymap } from "@codemirror/commands";
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from "@codemirror/autocomplete";
@@ -18,7 +18,7 @@ import { go } from "@codemirror/lang-go";
 import { sql } from "@codemirror/lang-sql";
 import { xml } from "@codemirror/lang-xml";
 
-export type EditorTheme = "classic" | "green" | "dark";
+export type EditorTheme = "classic" | "green" | "dark" | "github";
 
 /** 经典纯白主题 */
 const classicTheme = EditorView.theme({
@@ -87,11 +87,34 @@ const darkTheme = EditorView.theme({
   ".cm-foldMarker": { color: "#6c7086" },
 });
 
+/** GitHub 深色主题（DeepKing 同款 GitHub 皮肤，取 GitHub.com 官方深色配色） */
+const githubTheme = EditorView.theme({
+  "&": { backgroundColor: "#0d1117", color: "#e6edf3" },
+  ".cm-content": { caretColor: "#e6edf3" },
+  "&.cm-focused .cm-cursor": { borderLeftColor: "#e6edf3" },
+  ".cm-activeLine": { backgroundColor: "#161b22" },
+  ".cm-activeLineGutter": { backgroundColor: "#21262d" },
+  ".cm-gutters": { backgroundColor: "#0d1117", color: "#6e7681", border: "none" },
+  ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "#264f78 !important" },
+  ".cm-panels": { backgroundColor: "#161b22", color: "#e6edf3" },
+  ".cm-panels.cm-panels-top": { borderBottom: "1px solid #21262d" },
+  ".cm-panels.cm-panels-bottom": { borderTop: "1px solid #21262d" },
+  ".cm-searchMatch": { backgroundColor: "rgba(255, 213, 90, 0.35)" },
+  ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(255, 196, 0, 0.55)" },
+  ".cm-tooltip": { backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "6px" },
+  ".cm-tooltip-autocomplete > ul > li": { padding: "2px 6px" },
+  ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "#1f6feb", color: "#ffffff" },
+  ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
+  ".cm-foldMarker": { color: "#8b949e" },
+});
+
 /** 主题映射 */
 const themeMap: Record<EditorTheme, any> = {
   classic: classicTheme,
   green: greenTheme,
   dark: darkTheme,
+  github: githubTheme,
 };
 
 /** 深色主题语法高亮覆盖（让代码有彩色） */
@@ -119,6 +142,33 @@ const darkHighlightStyle = EditorView.baseTheme({
   ".cm-link": { color: "#89b4fa", textDecoration: "underline" },
   ".cm-error": { color: "#f38ba8" },
   ".cm-invalidchar": { color: "#f38ba8" },
+});
+
+/** GitHub 深色主题语法高亮（GitHub.com 官方 dark 配色） */
+const githubHighlightStyle = EditorView.baseTheme({
+  ".cm-keyword": { color: "#ff7b72" },
+  ".cm-operator": { color: "#ff7b72" },
+  ".cm-variable": { color: "#e6edf3" },
+  ".cm-variable-2": { color: "#ffa657" },
+  ".cm-variable-3": { color: "#79c0ff" },
+  ".cm-type": { color: "#ffa657" },
+  ".cm-def": { color: "#d2a8ff" },
+  ".cm-string": { color: "#a5d6ff" },
+  ".cm-string-2": { color: "#a5d6ff" },
+  ".cm-comment": { color: "#8b949e", fontStyle: "italic" },
+  ".cm-number": { color: "#79c0ff" },
+  ".cm-atom": { color: "#79c0ff" },
+  ".cm-meta": { color: "#e3b341" },
+  ".cm-tag": { color: "#7ee787" },
+  ".cm-attribute": { color: "#79c0ff" },
+  ".cm-property": { color: "#79c0ff" },
+  ".cm-qualifier": { color: "#ff7b72" },
+  ".cm-builtin": { color: "#d2a8ff" },
+  ".cm-function": { color: "#d2a8ff" },
+  ".cm-bracket": { color: "#e6edf3" },
+  ".cm-link": { color: "#58a6ff", textDecoration: "underline" },
+  ".cm-error": { color: "#f85149" },
+  ".cm-invalidchar": { color: "#f85149" },
 });
 
 /** 手动组合 basicSetup（避免依赖 codemirror meta-package） */
@@ -172,22 +222,47 @@ function getLanguageExtension(filename: string) {
   }
 }
 
+/** 编辑内容变化回调（模块级，保证 reconfigure 后仍然生效） */
+let editorUpdateCallback: ((update: any) => void) | null = null;
+
+/**
+ * 稳定部分（basicSetup：history/fold/autocomplete 等有状态扩展）放进独立 Compartment，
+ * 切换语言/主题时只 reconfigure 动态 Compartment，撤销栈和折叠状态得以保留。
+ */
+const stableCompartment = new Compartment();
+const dynamicCompartment = new Compartment();
+
+/** 动态部分：主题 + 语法高亮 + 语言扩展 */
+function dynamicExtensions(filename: string, theme: EditorTheme): any[] {
+  const langExt = getLanguageExtension(filename);
+  return [
+    themeMap[theme],
+    ...(theme === "dark" ? [darkHighlightStyle] : []),
+    ...(theme === "github" ? [githubHighlightStyle] : []),
+    ...(Array.isArray(langExt) ? langExt : [langExt]),
+  ];
+}
+
+/** 根据文件名与主题组装完整扩展列表 */
+function buildExtensions(filename: string, theme: EditorTheme): any[] {
+  return [
+    ...(editorUpdateCallback ? [EditorView.updateListener.of((u) => editorUpdateCallback!(u))] : []),
+    stableCompartment.of(basicSetup()),
+    dynamicCompartment.of(dynamicExtensions(filename, theme)),
+  ];
+}
+
 /** 创建 CodeMirror 6 编辑器 */
 export function createEditor(
   parent: HTMLElement,
   initialContent: string = "",
   filename: string = "untitled.txt",
   theme: EditorTheme = "classic",
+  onUpdate?: (update: any) => void,
 ): EditorView {
-  const langExt = getLanguageExtension(filename);
-  const extensions: any[] = [
-    basicSetup(),
-    themeMap[theme],
-    ...(theme === "dark" ? [darkHighlightStyle] : []),
-    ...(Array.isArray(langExt) ? langExt : [langExt]),
-  ];
+  editorUpdateCallback = onUpdate ?? null;
   return new EditorView({
-    state: EditorState.create({ doc: initialContent, extensions }),
+    state: EditorState.create({ doc: initialContent, extensions: buildExtensions(filename, theme) }),
     parent,
   });
 }
@@ -203,25 +278,13 @@ export function setEditorContent(view: any, content: string) {
 }
 
 export function setEditorLanguage(view: any, filename: string, theme: EditorTheme = "classic") {
-  const langExt = getLanguageExtension(filename);
   view.dispatch({
-    effects: StateEffect.reconfigure.of([
-      basicSetup(),
-      themeMap[theme],
-      ...(theme === "dark" ? [darkHighlightStyle] : []),
-      ...(Array.isArray(langExt) ? langExt : [langExt]),
-    ]),
+    effects: dynamicCompartment.reconfigure(dynamicExtensions(filename, theme)),
   });
 }
 
 export function setEditorTheme(view: any, filename: string, theme: EditorTheme) {
-  const langExt = getLanguageExtension(filename);
   view.dispatch({
-    effects: StateEffect.reconfigure.of([
-      basicSetup(),
-      themeMap[theme],
-      ...(theme === "dark" ? [darkHighlightStyle] : []),
-      ...(Array.isArray(langExt) ? langExt : [langExt]),
-    ]),
+    effects: dynamicCompartment.reconfigure(dynamicExtensions(filename, theme)),
   });
 }

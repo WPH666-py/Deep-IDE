@@ -35,7 +35,13 @@ fn file_ops_dir() -> PathBuf {
         }
     }
 
-    // 生产模式: resources/tools/file-ops
+    // 生产模式: Tauri 2 在 Windows 上资源目录 = exe 所在目录（tools/file-ops 在 exe 旁边）
+    let prod_tools = exe_dir.join("tools").join("file-ops");
+    if prod_tools.join("file_ops.exe").exists() {
+        return prod_tools.canonicalize().unwrap_or(prod_tools);
+    }
+
+    // 兼容旧布局: resources/tools/file-ops
     let res_tools = exe_dir.join("..").join("resources").join("tools").join("file-ops");
     if res_tools.join("file_ops.exe").exists() {
         return res_tools.canonicalize().unwrap_or(res_tools);
@@ -217,28 +223,30 @@ pub fn read_binary_text(path: String) -> Result<String, String> {
     crate::ai::file_parser::read_binary(&path)
 }
 
-/// PDF fallback：使用 Python pymupdf 读取（Windows 优先尝试 py 启动器）
+/// PDF fallback：使用捆绑 Python + pymupdf 读取
 fn read_pdf_with_pymupdf(path: &str) -> Result<String, String> {
-    let candidates = ["py", "python", "python3"];
-    let mut python: Option<&str> = None;
-    let mut last_err = String::new();
-    for &c in &candidates {
-        let mut cmd = Command::new(c);
-        hide_window(&mut cmd);
-        match cmd.arg("--version").output() {
-            Ok(o) if o.status.success() => { python = Some(c); break; }
-            Ok(o) => last_err = format!("{} --version 失败: {}", c, String::from_utf8_lossy(&o.stderr)),
-            Err(e) => last_err = format!("{} 启动失败: {}", c, e),
+    // 优先捆绑的 Python，其次系统 py/python/python3
+    let mut python: Option<String> = crate::ai::file_parser::bundled_python()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string());
+    if python.is_none() {
+        for &c in &["py", "python", "python3"] {
+            let mut cmd = Command::new(c);
+            hide_window(&mut cmd);
+            match cmd.arg("--version").output() {
+                Ok(o) if o.status.success() => { python = Some(c.to_string()); break; }
+                Ok(_) | Err(_) => {}
+            }
         }
     }
-    let python = python.ok_or_else(|| format!("未找到可用的 Python 解释器 (py/python/python3)。{}", last_err))?;
+    let python = python.ok_or_else(|| "未找到可用的 Python 解释器 (bundled/py/python/python3)".to_string())?;
 
-    let script = format!(
-        r#"
+    // 路径通过 argv 传入，避免拼接进脚本造成注入
+    let script = r#"
 import sys
 try:
     import fitz
-    doc = fitz.open(r'{}')
+    doc = fitz.open(sys.argv[1])
     text = []
     for page in doc:
         text.append(page.get_text())
@@ -246,14 +254,12 @@ try:
 except Exception as e:
     print('ERROR:', e, file=sys.stderr)
     sys.exit(1)
-"#,
-        path.replace("'", "''")
-    );
+"#;
 
-    let mut cmd = Command::new(python);
+    let mut cmd = Command::new(&python);
     hide_window(&mut cmd);
     let output = cmd
-        .args(["-c", &script])
+        .args(["-c", script, path])
         .output()
         .map_err(|e| format!("无法启动 Python ({}): {}", python, e))?;
 
@@ -274,7 +280,8 @@ except Exception as e:
 pub fn open_file_with_default_app(path: String) -> Result<(), String> {
     let mut cmd = Command::new("cmd");
     hide_window(&mut cmd);
-    cmd.args(["/C", "start", "", &path])
+    // 路径加引号，防止文件名中的 & 等字符被 cmd 解释为命令分隔符
+    cmd.args(["/C", "start", "", &format!("\"{}\"", path)])
         .spawn()
         .map_err(|e| format!("无法打开文件: {}", e))?;
     Ok(())

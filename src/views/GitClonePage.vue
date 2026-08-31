@@ -39,8 +39,10 @@
 import { ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import { tauriAPI } from "../services/tauri-api";
+import { useAppStore } from "../stores/app";
 
 const emit = defineEmits<{ (e: "navigate", page: string): void }>();
+const store = useAppStore();
 
 const repoUrl = ref("");
 const proxyUrl = ref("");
@@ -61,6 +63,11 @@ async function handleClone() {
   statusClass.value = "info";
   try {
     const result = await tauriAPI.gitClone(repoUrl.value, targetPath.value, proxyUrl.value || undefined);
+    // 克隆成功后把实际项目路径写入 store，否则编辑器打开的是空项目
+    const repoName = repoUrl.value.replace(/\.git$/, "").split("/").pop() || "repo";
+    const sep = targetPath.value.includes("\\") ? "\\" : "/";
+    const projectPath = targetPath.value.replace(/[\\/]+$/, "") + sep + repoName;
+    store.setProject(projectPath);
     status.value = result;
     statusClass.value = "success";
     setTimeout(() => emit("navigate", "editor"), 1000);

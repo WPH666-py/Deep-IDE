@@ -164,7 +164,7 @@
               <div class="msg-role">{{ roleLabel(msg.role) }}</div>
               <div class="msg-content">{{ msg.content }}</div>
             </div>
-            <div v-if="store.isLoading" class="message ai-message"><div class="msg-role">AI</div><div class="msg-content">{{ store.streamingContent || '思考中...' }}</div></div>
+            <div v-if="store.isLoading && !(store.displayMessages.length && store.displayMessages[store.displayMessages.length - 1].role === 'assistant')" class="message ai-message"><div class="msg-role">AI</div><div class="msg-content">{{ store.streamingContent || '思考中...' }}</div></div>
           </div>
           <div class="ai-input-area">
             <div class="ai-context-bar">
@@ -434,6 +434,7 @@
               <option value="classic">经典纯白</option>
               <option value="green">护眼淡绿</option>
               <option value="dark">深色专业</option>
+              <option value="github">GitHub 深色</option>
             </select>
           </div>
           <div class="form-group" style="margin-top:1.5rem">
@@ -503,7 +504,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from "vue";
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from "vue";
 import { useAppStore } from "../stores/app";
 import { tauriAPI } from "../services/tauri-api";
 import FileTreeNode from "../components/layout/FileTreeNode.vue";
@@ -579,7 +580,7 @@ const selectedBrowser = ref("edge");
 const settingsLanguage = ref("zh-CN");
 
 // Tab 管理
-interface TabInfo { path: string; name: string; dirty: boolean; content?: string; }
+interface TabInfo { path: string; name: string; dirty: boolean; content?: string; savedContent?: string; }
 const openTabs = ref<TabInfo[]>([]);
 const activeTab = ref("");
 const cmView = ref<EditorView | null>(null);
@@ -658,12 +659,17 @@ onMounted(async () => {
   const unlisten2 = await listen<string>("ai-stream-done", (event) => {
     try {
       const data = JSON.parse(event.payload);
-      store.streamingContent = "";
+      // 把完整内容写入占位消息（幂等），避免与 invoke 返回竞态
+      if (typeof data.content === "string") store.finishStream(data.content);
     } catch (_) {}
+  });
+  onUnmounted(() => {
+    unlisten1();
+    unlisten2();
   });
 
   await store.loadAgents();
-  if (store.apiKey) await store.switchMode("deep-anth");
+  if (store.apiKey && !store.personaInfo) await store.switchMode(store.currentMode || "deep-anth");
   if (store.currentProject) {
     await store.loadFileTree(store.currentProject);
     detectRuntimes();
@@ -671,7 +677,7 @@ onMounted(async () => {
   }
   const editorEl = document.getElementById("cm-editor");
   if (editorEl) {
-    cmView.value = createEditor(editorEl, "", "untitled.txt", store.editorTheme);
+    cmView.value = createEditor(editorEl, "", "untitled.txt", store.editorTheme, handleEditorUpdate);
     applyEditorThemeBg();
   }
   loadSettings();
@@ -694,6 +700,17 @@ onMounted(async () => {
   loadInstalledExtensions();
 });
 
+// ─── 编辑器内容变更 → 同步回 tab ───
+function handleEditorUpdate(u: any) {
+  if (!u.docChanged) return;
+  const path = activeTab.value;
+  const tab = openTabs.value.find(t => t.path === path);
+  if (!tab) return;
+  tab.content = u.state.doc.toString();
+  tab.dirty = tab.content !== (tab.savedContent ?? "");
+  isModified.value = tab.dirty;
+}
+
 // ─── 基础导航 ───
 function toggleDropdown(n: string) { openDropdown.value = openDropdown.value === n ? "" : n; }
 function closeDropdowns() { openDropdown.value = ""; }
@@ -714,8 +731,8 @@ function addCustomRuntime() {
   if (!name) return;
   const path = prompt("可执行文件路径（如: C:\\Python312\\python.exe）:");
   if (!path) return;
-  const saved = localStorage.getItem("deep-ide-custom-runtimes");
-  const customs = saved ? JSON.parse(saved) : [];
+  let customs: any[] = [];
+  try { customs = JSON.parse(localStorage.getItem("deep-ide-custom-runtimes") || "[]"); } catch (_) { customs = []; }
   customs.push({ name, path, available: true, version: "custom" });
   localStorage.setItem("deep-ide-custom-runtimes", JSON.stringify(customs));
   runtimes.value.push({ name, path, available: true, version: "custom" });
@@ -727,12 +744,18 @@ async function openFile(path: string) {
   const ext = name.split(".").pop()?.toLowerCase() || "";
   const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
   if (imageExts.includes(ext)) {
+    // 已打开过：直接激活，避免重复读取
+    if (openTabs.value.find(t => t.path === path)) {
+      switchTab(path);
+      return;
+    }
     try {
       const data = await invoke<number[]>("read_file_bytes", { path });
       const blob = new Blob([new Uint8Array(data)], { type: `image/${ext === "svg" ? "svg+xml" : ext}` });
+      if (imagePreviewSrc.value) URL.revokeObjectURL(imagePreviewSrc.value);
       imagePreviewSrc.value = URL.createObjectURL(blob);
       showImagePreview.value = true;
-      if (!openTabs.value.find(t => t.path === path)) openTabs.value.push({ path, name, dirty: false, content: "" });
+      openTabs.value.push({ path, name, dirty: false, content: "", savedContent: "" });
       activeTab.value = path;
       return;
     } catch (e) { console.error(e); }
@@ -745,6 +768,11 @@ async function openFile(path: string) {
     } catch (e: any) { alert("无法打开文件: " + e); }
     return;
   }
+  // 已打开过：切回该 tab，保留未保存的编辑
+  if (openTabs.value.find(t => t.path === path)) {
+    switchTab(path);
+    return;
+  }
   try {
     const content = await tauriAPI.readFile(path);
     currentFile.value = path;
@@ -753,9 +781,7 @@ async function openFile(path: string) {
       setEditorLanguage(cmView.value, name, store.editorTheme);
     }
     showImagePreview.value = false;
-    if (!openTabs.value.find(t => t.path === path)) {
-      openTabs.value.push({ path, name, dirty: false, content });
-    }
+    openTabs.value.push({ path, name, dirty: false, content, savedContent: content });
     activeTab.value = path;
     isModified.value = false;
   } catch (e: any) { alert("读取文件失败: " + e); }
@@ -771,9 +797,10 @@ function switchTab(path: string) {
   if (imageExts.includes(ext) && tab.content === "") {
     // 图片 tab：显示预览
     showImagePreview.value = true;
-    // 重新生成 blob URL（之前的可能已被 revoke）
+    // 重新生成 blob URL（之前的可能已被 revoke）；回调里校验仍为该 tab，避免乱序覆盖
     invoke<number[]>("read_file_bytes", { path: tab.path }).then(data => {
-      if (URL.revokeObjectURL) URL.revokeObjectURL(imagePreviewSrc.value);
+      if (activeTab.value !== tab.path) return;
+      if (imagePreviewSrc.value) URL.revokeObjectURL(imagePreviewSrc.value);
       const blob = new Blob([new Uint8Array(data)], { type: `image/${ext === "svg" ? "svg+xml" : ext}` });
       imagePreviewSrc.value = URL.createObjectURL(blob);
     }).catch(e => console.error(e));
@@ -790,7 +817,8 @@ async function closeTab(path: string) {
   const tab = openTabs.value.find(t => t.path === path);
   if (tab?.dirty) {
     const ok = await showInlineConfirm("保存更改", `文件 ${tab.name} 已修改，是否保存？`);
-    if (ok) await saveFile(path, getCurrentContent());
+    // 用被关闭 tab 自己的缓冲区内容保存，而不是当前活动编辑器内容
+    if (ok) await saveFile(path, tab.content ?? "");
   }
   openTabs.value = openTabs.value.filter(t => t.path !== path);
   // 如果关闭的是图片预览 tab，隐藏预览
@@ -826,7 +854,7 @@ async function saveFile(path: string, content: string) {
   try {
     await tauriAPI.writeFile(path, content);
     const tab = openTabs.value.find(t => t.path === path);
-    if (tab) { tab.dirty = false; tab.content = content; }
+    if (tab) { tab.dirty = false; tab.content = content; tab.savedContent = content; }
     isModified.value = false;
   } catch (e: any) { alert("保存失败: " + e); }
 }
@@ -881,12 +909,16 @@ async function runProject() {
   } catch (e: any) { terminalLines.value.push({ type: "term-err", text: e }); }
   nextTick(scrollTerminal);
 }
-function openHtmlInBrowser(path: string) {
+async function openHtmlInBrowser(path: string) {
   const browser = selectedBrowser.value || "edge";
   const browserCmd = browser === "chrome" ? "chrome" : browser === "quark" ? "quark" : "start msedge";
-  tauriAPI.runCommand(".", `${browserCmd} "${path}"`);
   showTerminal.value = true;
   terminalLines.value.push({ type: "term-cmd", text: `在浏览器打开 ${path}` });
+  try {
+    await tauriAPI.runCommand(".", `${browserCmd} "${path}"`);
+  } catch (e: any) {
+    terminalLines.value.push({ type: "term-err", text: String(e) });
+  }
 }
 
 // ─── 终端 ───
@@ -1042,8 +1074,10 @@ async function ctxDelete() {
 }
 async function editorCtxAction(action: string) {
   if (action === "refactor") {
-    // 将选中的代码发送到 AI 进行重构
-    const content = getCurrentContent();
+    // 优先使用选中的代码，未选中则用整个文件
+    const view = cmView.value;
+    const sel = view ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to) : "";
+    const content = sel.trim() ? sel : getCurrentContent();
     if (!content.trim()) { alert("请先在编辑器中选中要重构的代码"); return; }
     const tab = openTabs.value.find(t => t.path === activeTab.value);
     const fileName = tab?.name || "current file";
@@ -1054,11 +1088,23 @@ async function editorCtxAction(action: string) {
     aiTab.value = "chat";
     return;
   }
-  const input = document.querySelector(".code-editor textarea") as HTMLTextAreaElement | null;
-  if (!input) return;
-  if (action === "cut") { input.setRangeText("", input.selectionStart, input.selectionEnd, "end"); }
-  else if (action === "copy") { navigator.clipboard.writeText(input.value.substring(input.selectionStart, input.selectionEnd)); }
-  else if (action === "paste") { navigator.clipboard.readText().then(t => { input.setRangeText(t, input.selectionStart, input.selectionEnd, "end"); }); }
+  // 基于 CodeMirror 状态的剪切/复制/粘贴（旧实现查询 textarea 在 CM6 中恒为 null）
+  const view = cmView.value;
+  if (!view) return;
+  const { from, to } = view.state.selection.main;
+  if (action === "cut") {
+    const text = view.state.sliceDoc(from, to);
+    await navigator.clipboard.writeText(text);
+    view.dispatch({ changes: { from, to } });
+  } else if (action === "copy") {
+    const text = view.state.sliceDoc(from, to);
+    if (text) await navigator.clipboard.writeText(text);
+  } else if (action === "paste") {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) view.dispatch({ changes: { from, to, insert: t }, selection: { anchor: from + t.length } });
+    } catch (_) {}
+  }
 }
 function aiCtxAction(action: string) {
   const input = aiInputRef.value; if (!input) return;
@@ -1173,8 +1219,10 @@ async function saveApiConfig() {
 
 // ─── 设置/插件 ───
 function loadSettings() {
-  const saved = localStorage.getItem("deep-ide-settings");
-  if (saved) { const s = JSON.parse(saved); settingsLanguage.value = s.language || "zh-CN"; }
+  try {
+    const saved = localStorage.getItem("deep-ide-settings");
+    if (saved) { const s = JSON.parse(saved); settingsLanguage.value = s.language || "zh-CN"; }
+  } catch (_) {}
 }
 function changeLanguage() {
   localStorage.setItem("deep-ide-settings", JSON.stringify({ language: settingsLanguage.value }));
@@ -1197,14 +1245,17 @@ function applyEditorThemeBg() {
   // CodeMirror 生成的 .cm-editor 元素在 #cm-editor 容器内
   const cmEditor = editorEl.querySelector(".cm-editor") as HTMLElement | null;
   switch (store.editorTheme) {
-    case "classic": editorEl.style.backgroundColor = "#ffffff"; cmEditor?.classList.remove("dark-theme"); break;
-    case "green": editorEl.style.backgroundColor = "#a8e063"; cmEditor?.classList.remove("dark-theme"); break;
-    case "dark": editorEl.style.backgroundColor = "#1e1e2e"; cmEditor?.classList.add("dark-theme"); break;
+    case "classic": editorEl.style.backgroundColor = "#ffffff"; cmEditor?.classList.remove("dark-theme", "github-theme"); break;
+    case "green": editorEl.style.backgroundColor = "#a8e063"; cmEditor?.classList.remove("dark-theme", "github-theme"); break;
+    case "dark": editorEl.style.backgroundColor = "#1e1e2e"; cmEditor?.classList.add("dark-theme"); cmEditor?.classList.remove("github-theme"); break;
+    case "github": editorEl.style.backgroundColor = "#0d1117"; cmEditor?.classList.add("github-theme"); cmEditor?.classList.remove("dark-theme"); break;
   }
 }
 function loadInstalledExtensions() {
-  const saved = localStorage.getItem("deep-ide-extensions");
-  installedExtensions.value = saved ? JSON.parse(saved) : [];
+  try {
+    const saved = localStorage.getItem("deep-ide-extensions");
+    installedExtensions.value = saved ? JSON.parse(saved) : [];
+  } catch (_) { installedExtensions.value = []; }
 }
 function saveInstalledExtensions() {
   localStorage.setItem("deep-ide-extensions", JSON.stringify(installedExtensions.value));

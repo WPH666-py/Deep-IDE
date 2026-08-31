@@ -409,6 +409,12 @@ static bool readZipEntry(const std::vector<char>& zipData, const char* entryName
     if (idx < 0) { mz_zip_reader_end(&zip); return false; }
     mz_zip_archive_file_stat stat;
     if (!mz_zip_reader_file_stat(&zip, idx, &stat)) { mz_zip_reader_end(&zip); return false; }
+    // ZIP 炸弹防护：单条目解压上限 256MB
+    if (stat.m_uncomp_size > 256ULL * 1024 * 1024) {
+        std::cerr << "ERROR: zip entry too large: " << entryName << " (" << stat.m_uncomp_size << " bytes)" << std::endl;
+        mz_zip_reader_end(&zip);
+        return false;
+    }
     size_t size = (size_t)stat.m_uncomp_size;
     if (size == 0) { mz_zip_reader_end(&zip); out.clear(); return true; }
     std::vector<char> buf(size);

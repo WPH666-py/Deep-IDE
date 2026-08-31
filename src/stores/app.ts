@@ -10,7 +10,9 @@ export const useAppStore = defineStore("app", () => {
   const apiKey = ref<string>("");
   const baseUrl = ref<string>("https://api.deepseek.com");
   const model = ref<string>("deepseek-chat");
-  const editorTheme = ref<EditorTheme>((localStorage.getItem("editorTheme") as EditorTheme) || "classic");
+  const validThemes: EditorTheme[] = ["classic", "green", "dark", "github"];
+  const savedTheme = localStorage.getItem("editorTheme") as EditorTheme | null;
+  const editorTheme = ref<EditorTheme>(savedTheme && validThemes.includes(savedTheme) ? savedTheme : "classic");
 
   // Persona 信息
   const personaInfo = ref<ModeInfo | null>(null);
@@ -110,9 +112,10 @@ export const useAppStore = defineStore("app", () => {
     const msgIndex = messages.value.length - 1;
 
     try {
-      await tauriAPI.sendAIMessageStream(currentMode.value, content, history, contextPaths);
-      // 流式 completion 后，content 从 event 中积累
-      messages.value[msgIndex].content = streamingContent.value;
+      const result = await tauriAPI.sendAIMessageStream(currentMode.value, content, history, contextPaths);
+      // 完成后以 invoke 返回值为准（后端先 emit ai-stream-done 再返回，直接读 streamingContent 有竞态）
+      messages.value[msgIndex].content = (result as any)?.content || streamingContent.value;
+      streamingContent.value = "";
     } catch (e: any) {
       messages.value[msgIndex].content = `错误: ${e}`;
     } finally {
@@ -134,7 +137,8 @@ export const useAppStore = defineStore("app", () => {
     toolCalls.value = [];
     agentIterations.value = 0;
     agentMaxIterations.value = 0;
-    const history = messages.value.filter(m => m.role !== "system");
+    // 去掉刚 push 的这条 user 消息，后端会单独把 user_message 作为第一条消息
+    const history = messages.value.filter(m => m.role !== "system").slice(0, -1);
 
     // 添加占位消息
     messages.value.push({ role: "assistant", content: "🛠 工具调用中...\n", type: "assistant" });
@@ -196,12 +200,14 @@ export const useAppStore = defineStore("app", () => {
         }
       });
 
-      const wd = workingDir || currentProject.value || undefined;
-      const result = await tauriAPI.sendAIMessageWithTools(currentMode.value, requestContent, history, contextPaths, wd);
-      messages.value[msgIndex].content = messages.value[msgIndex].content || result.content;
-      addSystemMessage(`✅ Agent Loop 完成: ${result.total_iterations} 步, ${result.total_tool_calls} 个工具调用`);
-
-      unlisten();
+      try {
+        const wd = workingDir || currentProject.value || undefined;
+        const result = await tauriAPI.sendAIMessageWithTools(currentMode.value, requestContent, history, contextPaths, wd);
+        messages.value[msgIndex].content = messages.value[msgIndex].content || result.content;
+        addSystemMessage(`✅ Agent Loop 完成: ${result.total_iterations} 步, ${result.total_tool_calls} 个工具调用`);
+      } finally {
+        unlisten();
+      }
     } catch (e: any) {
       messages.value[msgIndex].content = `❌ 错误: ${e}`;
     } finally {
@@ -217,6 +223,19 @@ export const useAppStore = defineStore("app", () => {
       if (msgs[i].role === "assistant") {
         msgs[i].content = streamingContent.value;
         break;
+      }
+    }
+  }
+
+  /** ai-stream-done 事件兜底：把完整内容写入占位消息（幂等） */
+  function finishStream(content: string) {
+    if (!content) return;
+    streamingContent.value = "";
+    const msgs = messages.value;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "assistant" && !msgs[i].content) {
+        msgs[i].content = content;
+        return;
       }
     }
   }
@@ -289,7 +308,7 @@ export const useAppStore = defineStore("app", () => {
     setProject, openProject, closeProject,
     loadFileTree,
     switchMode, loadAgents, configureApiKey,
-    sendMessage, sendMessageStream, sendMessageWithTools, appendStreamToken, addSystemMessage, clearMessages,
+    sendMessage, sendMessageStream, sendMessageWithTools, appendStreamToken, finishStream, addSystemMessage, clearMessages,
     toolCalls, agentIterations, agentMaxIterations, useTools,
     setEditorTheme,
     checkSafety,

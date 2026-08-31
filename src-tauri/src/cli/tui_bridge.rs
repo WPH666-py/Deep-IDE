@@ -43,11 +43,24 @@ pub fn get_cli_version() -> Option<String> {
         })
 }
 
-/// 将 Persona prompt 写入 workspace 下的 AGENTS.md
+/// 将 Persona prompt 注入 workspace 下的 AGENTS.md（保留已有内容，按标记合并）
 pub fn inject_persona_prompt(workspace: &PathBuf, persona_prompt: &str) -> Result<(), String> {
+    const MARKER: &str = "<!-- Deep-IDE Persona Injection -->";
     let agents_path = workspace.join("AGENTS.md");
-    std::fs::write(&agents_path, persona_prompt)
-        .map_err(|e| format!("Failed to write AGENTS.md: {}", e))
+    let section = format!("\n\n{}\n{}\n{}\n", MARKER, persona_prompt, MARKER);
+    let existing = std::fs::read_to_string(&agents_path).unwrap_or_default();
+    let merged = if let Some(start) = existing.find(MARKER) {
+        match existing[start + MARKER.len()..].find(MARKER) {
+            Some(rel_end) => {
+                let end = start + MARKER.len() + rel_end + MARKER.len();
+                format!("{}{}{}", &existing[..start], section, &existing[end..])
+            }
+            None => format!("{}{}", existing, section),
+        }
+    } else {
+        format!("{}{}", existing, section)
+    };
+    std::fs::write(&agents_path, merged).map_err(|e| format!("Failed to write AGENTS.md: {}", e))
 }
 
 /// 通过 deepseek CLI 执行 Agent 任务（后台模式）
@@ -73,7 +86,18 @@ pub async fn execute_agent_task(
         .map_err(|e| format!("Failed to spawn deepseek CLI: {}. Install via: npm install -g @deepseek/cli", e))?;
 
     let stdout = child.stdout.take().ok_or("No stdout")?;
-    let _stderr = child.stderr.take().ok_or("No stderr")?;
+    let stderr = child.stderr.take().ok_or("No stderr")?;
+
+    // 并发排空 stderr，防止管道写满导致 CLI 挂死
+    let stderr_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr).lines();
+        let mut err = String::new();
+        while let Ok(Some(line)) = reader.next_line().await {
+            err.push_str(&line);
+            err.push('\n');
+        }
+        err
+    });
 
     let mut reader = BufReader::new(stdout).lines();
     let mut output = String::new();
@@ -86,12 +110,17 @@ pub async fn execute_agent_task(
     }
 
     let status = child.wait().await.map_err(|e| format!("Wait error: {}", e))?;
+    let stderr_text = stderr_task.await.unwrap_or_default();
 
     if !status.success() {
         return Ok(CLIResult {
             success: false,
             output,
-            error: Some(format!("CLI exited with code: {:?}", status.code())),
+            error: Some(format!(
+                "CLI exited with code: {:?}{}",
+                status.code(),
+                if stderr_text.is_empty() { String::new() } else { format!("\n{}", stderr_text) }
+            )),
         });
     }
 

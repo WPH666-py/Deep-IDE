@@ -128,8 +128,15 @@ pub fn git_branches(path: String) -> Result<Vec<String>, String> {
 
 /// Git Clone
 #[tauri::command]
-pub async fn git_clone(url: String, target: String) -> Result<String, String> {
-    let output = Command::new("git")
+pub async fn git_clone(url: String, target: String, proxy: Option<String>) -> Result<String, String> {
+    let mut cmd = Command::new("git");
+    if let Some(p) = proxy {
+        let p = p.trim();
+        if !p.is_empty() {
+            cmd.args(["-c", &format!("http.proxy={}", p), "-c", &format!("https.proxy={}", p)]);
+        }
+    }
+    let output = cmd
         .args(["clone", &url, &target])
         .output()
         .map_err(|e| format!("Failed to clone: {}", e))?;
@@ -173,7 +180,14 @@ pub async fn git_push(
         }
     }
 
-    // 设置远程仓库
+    // 设置远程仓库（记录原 URL，push 后恢复，避免 Token 留在 .git/config）
+    let original_remote = Command::new("git")
+        .args(["-C", &path, "remote", "get-url", "origin"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty());
+
     let remote_url = format!("https://{}:{}@github.com/{}", username, token, repo);
     let remote_out = Command::new("git")
         .args(["-C", &path, "remote", "set-url", "origin", &remote_url])
@@ -195,6 +209,18 @@ pub async fn git_push(
         .args(["-C", &path, "push", "-u", "origin", &branch])
         .output()
         .map_err(|e| format!("Push failed: {}", e))?;
+
+    // 恢复远程 URL，避免 Token 明文残留在仓库配置里
+    let restore = match original_remote {
+        Some(url) => Command::new("git")
+            .args(["-C", &path, "remote", "set-url", "origin", &url])
+            .output(),
+        None => Command::new("git")
+            .args(["-C", &path, "remote", "set-url", "origin", &format!("https://github.com/{}", repo)])
+            .output(),
+    };
+    let _ = restore;
+
     if push_output.status.success() {
         Ok(format!("Push to {}/{} succeeded", repo, branch))
     } else {

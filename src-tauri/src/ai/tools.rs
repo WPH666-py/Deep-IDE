@@ -1106,51 +1106,114 @@ async fn run_cmd_with_timeout(command: &str, cwd: &Path, timeout_ms: u64) -> Cmd
     let python_dir = crate::ai::file_parser::bundled_python()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-    let result = tokio::task::spawn_blocking(move || {
-        #[cfg(target_os = "windows")]
-        let output = {
-            let mut cmd = Command::new("cmd");
-            hide_window(&mut cmd);
-            cmd.args(&["/C", &cmd_str])
-                .current_dir(&cwd)
-                .env("PYTHONIOENCODING", "utf-8");
-            if let Some(ref py_dir) = python_dir {
-                let existing_path = std::env::var("PATH").unwrap_or_default();
-                cmd.env("PATH", format!("{};{}", py_dir.display(), existing_path));
-            }
-            cmd.output()
-        };
-        #[cfg(not(target_os = "windows"))]
-        let output = {
-            let mut cmd = Command::new("sh");
-            cmd.arg("-c").arg(&cmd_str).current_dir(&cwd);
-            if let Some(ref py_dir) = python_dir {
-                let existing_path = std::env::var("PATH").unwrap_or_default();
-                cmd.env("PATH", format!("{}:{}", py_dir.display(), existing_path));
-            }
-            cmd.output()
-        };
-        output
-    }).await;
 
-    match result {
-        Ok(Ok(out)) => CmdOutput {
-            success: out.status.success(),
-            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-            exit_code: out.status.code().unwrap_or(-1),
-        },
-        Ok(Err(e)) => CmdOutput {
-            success: false,
-            stdout: String::new(),
-            stderr: format!("Failed to spawn: {}", e),
-            exit_code: -1,
-        },
-        Err(_) => CmdOutput {
-            success: false,
-            stdout: String::new(),
-            stderr: format!("Command timed out after {}ms", timeout_ms),
-            exit_code: -1,
-        },
-    }
+    tokio::task::spawn_blocking(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms.max(1));
+        let spawn_child = || -> std::io::Result<std::process::Child> {
+            #[cfg(target_os = "windows")]
+            {
+                let mut cmd = Command::new("cmd");
+                hide_window(&mut cmd);
+                cmd.args(&["/C", &cmd_str])
+                    .current_dir(&cwd)
+                    .env("PYTHONIOENCODING", "utf-8")
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                if let Some(ref py_dir) = python_dir {
+                    let existing_path = std::env::var("PATH").unwrap_or_default();
+                    cmd.env("PATH", format!("{};{}", py_dir.display(), existing_path));
+                }
+                cmd.spawn()
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let mut cmd = Command::new("sh");
+                cmd.arg("-c")
+                    .arg(&cmd_str)
+                    .current_dir(&cwd)
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                if let Some(ref py_dir) = python_dir {
+                    let existing_path = std::env::var("PATH").unwrap_or_default();
+                    cmd.env("PATH", format!("{}:{}", py_dir.display(), existing_path));
+                }
+                cmd.spawn()
+            }
+        };
+
+        let mut child = match spawn_child() {
+            Ok(c) => c,
+            Err(e) => {
+                return CmdOutput {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: format!("Failed to spawn: {}", e),
+                    exit_code: -1,
+                }
+            }
+        };
+
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    // 子进程已退出，读取管道输出
+                    use std::io::Read;
+                    let mut stdout = String::new();
+                    let mut stderr = String::new();
+                    if let Some(mut s) = child.stdout.take() {
+                        let mut buf = Vec::new();
+                        let _ = s.read_to_end(&mut buf);
+                        stdout = String::from_utf8_lossy(&buf).to_string();
+                    }
+                    if let Some(mut s) = child.stderr.take() {
+                        let mut buf = Vec::new();
+                        let _ = s.read_to_end(&mut buf);
+                        stderr = String::from_utf8_lossy(&buf).to_string();
+                    }
+                    return CmdOutput {
+                        success: status.success(),
+                        stdout,
+                        stderr,
+                        exit_code: status.code().unwrap_or(-1),
+                    };
+                }
+                Ok(None) => {
+                    if std::time::Instant::now() >= deadline {
+                        // 真超时：杀掉整个进程树，避免孙进程持有管道导致后续读取卡死
+                        let pid = child.id();
+                        let _ = child.kill();
+                        #[cfg(target_os = "windows")]
+                        if pid > 0 {
+                            let _ = Command::new("taskkill")
+                                .args(["/F", "/T", "/PID", &pid.to_string()])
+                                .output();
+                        }
+                        let _ = child.wait();
+                        return CmdOutput {
+                            success: false,
+                            stdout: String::new(),
+                            stderr: format!("Command timed out after {}ms", timeout_ms),
+                            exit_code: -1,
+                        };
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(40));
+                }
+                Err(e) => {
+                    return CmdOutput {
+                        success: false,
+                        stdout: String::new(),
+                        stderr: format!("wait error: {}", e),
+                        exit_code: -1,
+                    }
+                }
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| CmdOutput {
+        success: false,
+        stdout: String::new(),
+        stderr: "task join error".into(),
+        exit_code: -1,
+    })
 }

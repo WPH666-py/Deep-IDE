@@ -71,10 +71,15 @@ pub fn get_personas_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."));
 
     // 从 target/debug/ 或 target/release/ 向上一级找 personas/
+    // 打包安装后资源在 exe 旁边；用 ".." 引用的资源会被展平到 _up_/ 目录
     for _ in 0..4 {
         let personas = dir.join("personas");
         if personas.exists() {
             return personas;
+        }
+        let flat_personas = dir.join("_up_").join("personas");
+        if flat_personas.exists() {
+            return flat_personas;
         }
         dir = dir.parent().map(|p| p.to_path_buf()).unwrap_or(dir);
     }

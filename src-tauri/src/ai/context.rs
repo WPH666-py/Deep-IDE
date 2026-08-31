@@ -131,7 +131,7 @@ impl ContextCompressor {
 
         for (i, msg) in messages.iter().enumerate() {
             let preview = if msg.content.len() > 200 {
-                format!("{}...", &msg.content[..200])
+                format!("{}...", truncate_preview(&msg.content, 200))
             } else {
                 msg.content.clone()
             };
@@ -154,4 +154,16 @@ impl ContextCompressor {
     pub fn update_config(&mut self, config: CompressorConfig) {
         self.config = config;
     }
+}
+
+/// 按字符边界安全截断（避免在 UTF-8 多字节字符中间切片 panic）
+fn truncate_preview(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut cut = max_bytes;
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    &s[..cut]
 }

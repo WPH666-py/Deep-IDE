@@ -61,7 +61,8 @@ async function testConnection() {
   try {
     const msg = await tauriAPI.sshTest({
       host: host.value,
-      port: port.value,
+      // 清空输入框时 v-model.number 会是 ""，转成数字并回退 22，避免 Rust u16 反序列化失败
+      port: Number(port.value) || 22,
       username: username.value,
       password: password.value || undefined,
       key_path: keyPath.value || undefined,

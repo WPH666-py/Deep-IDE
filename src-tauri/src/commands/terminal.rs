@@ -18,7 +18,8 @@ pub fn open_terminal(path: String) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("cmd")
-            .args(["/C", "start", "wt", "-d", &path])
+            // -d 参数加引号，兼容带空格的路径，并防止 & 等字符被 cmd 解释
+            .args(["/C", "start", "wt", "-d", &format!("\"{}\"", path)])
             .spawn()
             .map_err(|e| format!("Failed to open Windows Terminal: {}", e))?;
     }
