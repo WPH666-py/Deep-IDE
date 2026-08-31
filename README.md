@@ -6,6 +6,10 @@
 ---
 <img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/66274499-a98d-489e-a382-01efd73ce014" />
 
+## 下载安装 / Download
+
+- **Windows 安装包（v0.1.0，含 GitHub 深色皮肤）**：<https://github.com/WPH666-py/Deep-IDE/raw/master/release/Deep%20IDE_0.1.0_x64-setup.exe>
+
 # 一、中文说明（约 2000 字）
 
 ## 1. 项目简介
