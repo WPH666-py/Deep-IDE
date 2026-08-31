@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { tauriAPI, type ModeInfo, type Message, type AgentDef, type FileEntry } from "../services/tauri-api";
 import type { EditorTheme } from "../utils/codemirror";
-import { BUILTIN_SKINS, applyUISkinCss, skinCssFor, type UISkin } from "../utils/skins";
+import { BUILTIN_SKINS, applyUISkinCss, skinCssFor, convertPaletteToSkin, type UISkin } from "../utils/skins";
 
 export const useAppStore = defineStore("app", () => {
   const currentProject = ref<string | null>(null);
@@ -56,17 +56,23 @@ export const useAppStore = defineStore("app", () => {
       const result = await tauriAPI.fetchGithubSkin(url);
       const skin: UISkin = {
         id: "custom-" + Math.random().toString(36).slice(2, 8),
-        name: result.repo.split("/").pop() || result.repo,
-        desc: `来自 ${result.repo}（${result.file}）`,
+        name: result.name || result.repo.split("/").pop() || result.repo,
+        desc: result.tagline || (result.palette ? `来自 ${result.repo}（DeepKing 调色板 ${result.file}）` : `来自 ${result.repo}（${result.file}）`),
         source: "custom",
         repo: result.repo,
       };
-      if (result.file.includes("dark")) skin.cssDark = result.css;
-      else if (result.file.includes("light")) skin.cssLight = result.css;
-      else { skin.cssLight = result.css; skin.cssDark = result.css; }
+      // DeepKing 调色板 → 生成亮/暗两套映射到本应用界面的皮肤
+      const converted = result.palette ? convertPaletteToSkin(result.css) : null;
+      if (converted) {
+        skin.cssLight = converted.light;
+        skin.cssDark = converted.dark;
+      } else {
+        skin.cssLight = result.css;
+        skin.cssDark = result.css;
+      }
       customSkins.value.push(skin);
       saveCustomSkins();
-      applyUISkin(skin.id, result.file.includes("dark") ? "dark" : "light");
+      applyUISkin(skin.id, "light");
     } catch (e: any) {
       skinError.value = String(e);
       throw e;

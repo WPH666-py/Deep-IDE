@@ -100,5 +100,5 @@ export const tauriAPI = {
   runCliAgentTask: (workspace: string, task: string, personaPrompt: string, apiKey: string) => invoke<{success:boolean;output:string;error:string|null}>("run_cli_agent_task", { workspace, task, personaPrompt, apiKey }),
 
   // ─── UI Skin 从 GitHub 仓库拉取 ───
-  fetchGithubSkin: (repoUrl: string) => invoke<{repo:string;file:string;css:string}>("fetch_github_skin", { repoUrl }),
+  fetchGithubSkin: (repoUrl: string) => invoke<{repo:string;file:string;name:string|null;tagline:string|null;palette:boolean;css:string}>("fetch_github_skin", { repoUrl }),
 };

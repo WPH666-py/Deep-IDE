@@ -278,3 +278,185 @@ export function skinCssFor(skin: UISkin | null | undefined, variant: "light" | "
   if (variant === "dark") return skin.cssDark || skin.cssLight;
   return skin.cssLight || skin.cssDark;
 }
+
+// ═══════════════════════════════════════════════════════════
+// DeepKing 皮肤规范转换器：skin.json 调色板 CSS（:root 亮色 + .dark 暗色）
+// → 生成映射到 Deep IDE 界面的皮肤 CSS（亮/暗两套）
+// ═══════════════════════════════════════════════════════════
+
+type Palette = Record<string, string>;
+
+function extractVarBlock(css: string, patterns: RegExp[]): Palette | null {
+  for (const re of patterns) {
+    const m = css.match(re);
+    if (m && m[1]) {
+      const vars: Palette = {};
+      const pairRe = /(--[\w-]+)\s*:\s*([^;]+);/g;
+      let hit: RegExpExecArray | null;
+      while ((hit = pairRe.exec(m[1]))) {
+        vars[hit[1].trim()] = hit[2].trim();
+      }
+      if (Object.keys(vars).length > 0) return vars;
+    }
+  }
+  return null;
+}
+
+/** 解析 DeepKing 调色板：亮色(:root) + 暗色(.dark / [data-theme=dark]) */
+export function extractPalette(css: string): { light: Palette; dark: Palette } | null {
+  const light = extractVarBlock(css, [/:root\s*\{([^}]*)\}/]);
+  const dark = extractVarBlock(css, [
+    /\.dark\s*\{([^}]*)\}/,
+    /\[data-theme=["']?dark["']?\]\s*\{([^}]*)\}/,
+  ]);
+  if (!light) return null;
+  return { light, dark: dark || {} };
+}
+
+/** DeepKing 调色板变量 → 界面皮肤 CSS（占位符模板） */
+const SKIN_TEMPLATE = `
+.app-container { background: {{bg-base}} !important; color: {{text}}; }
+.app-container ::-webkit-scrollbar-thumb { background: {{border}} !important; }
+.editor-header { background: {{layer2}}; border-bottom:1px solid {{border}}; }
+.editor-header select, .editor-header input, .editor-header button { color: {{text}}; }
+.dropdown-menu { background: {{layer2}}; border:1px solid {{border}}; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+.dropdown-item { color: {{text}}; }
+.dropdown-item:hover { background: {{hover}}; }
+.dropdown-divider { background: {{border}}; }
+.file-explorer { background: {{bg-base}}; border-right:1px solid {{border}}; }
+.file-explorer-header { background: {{layer2}}; border-bottom:1px solid {{border}}; }
+.file-item { color: {{text}}; }
+.file-item:hover { background: {{hover}}; }
+.file-item.selected { background: {{active}}; color: {{text}}; }
+.file-item.open { background: {{hover}}; }
+.file-item.open:hover { background: {{border}}; }
+.file-item .expand-icon { color: {{muted}}; }
+.tabs-bar { background: {{bg-base}}; border-bottom:1px solid {{border}}; }
+.tab:not(.active) { background: {{layer2}}; color: {{muted}}; border-top:2px solid transparent; }
+.tab.active { background: {{bg-base}}; color: {{text}}; border-top:2px solid {{accent}}; }
+.tab-close:hover { background: {{accent}}; color:#fff; }
+.editor-main-content { background: {{bg-base}}; }
+.editor-empty-title { color: {{muted}}; }
+.editor-empty-desc { color: {{muted}}; }
+.terminal-panel { background: {{bg-base}}; border-top:1px solid {{border}}; }
+.terminal-header { background: {{layer2}}; border-bottom:1px solid {{border}}; }
+.terminal-action-btn { background: {{layer2}}; color: {{text}}; border:1px solid {{border}}; }
+.terminal-action-btn:hover { background: {{hover}}; }
+.terminal-close-btn { color: {{muted}}; }
+.terminal-content { background: {{bg-base}}; color: {{text}}; }
+.ai-panel { background: {{bg-base}}; border-left:1px solid {{border}}; }
+.ai-panel-tabs { background: {{layer2}}; border-bottom:1px solid {{border}}; }
+.ai-tab { color: {{muted}}; }
+.ai-tab.active { color: {{text}}; border-bottom-color: {{accent}}; }
+.ai-message { background: {{layer2}}; border:1px solid {{border}}; color: {{text}}; }
+.ai-input-area { border-top:1px solid {{border}}; }
+.ai-input-area textarea { background: {{layer3}}; color: {{text}}; border:1px solid {{border}}; }
+.ai-input-area textarea:focus { border-color: {{accent}}; }
+.ai-send-row select { background: {{layer2}}; color: {{text}}; border:1px solid {{border}}; }
+.ai-config-btn { border:1px solid {{border}}; color: {{muted}}; }
+.ai-config-btn:hover { color: {{text}}; border-color: {{accent}}; }
+.ai-tools-toggle { color: {{muted}}; border:1px solid {{border}}; }
+.ai-tools-toggle:hover { color: {{text}}; border-color: {{accent}}; }
+.ai-send-btn { background: {{accent}}; color:#fff; }
+.ai-send-btn:hover { filter:brightness(1.1); }
+.ai-send-btn:disabled { background: {{border}}; color: {{muted}}; }
+.ai-context-chip { background: {{hover}}; color: {{accent}}; border:1px solid {{border}}; }
+.ai-context-add-btn { border:1px solid {{border}}; color: {{muted}}; }
+.ai-context-add-btn:hover { border-color: {{accent}}; color: {{accent}}; }
+.persona-info-bar { background: {{layer2}}; border-top:1px solid {{border}}; }
+.persona-badge { background: {{accent}}; color:#fff; }
+.persona-detail { color: {{muted}}; }
+.plugin-item { background: {{layer2}}; border:1px solid {{border}} !important; }
+.plugin-name { color: {{text}}; }
+.plugin-desc { color: {{muted}}; }
+.tool-detail-pre { background: {{layer3}}; color: {{text}}; border:1px solid {{border}}; }
+.tool-detail-line { color: {{muted}}; }
+.modal-overlay { background: rgba(0,0,0,.45); }
+.modal-box { background: {{layer2}}; color: {{text}}; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+.modal-header { border-bottom:1px solid {{border}}; }
+.modal-header h3 { color: {{text}}; }
+.modal-close { color: {{muted}}; }
+.modal-close:hover { background: {{hover}}; color: {{text}}; }
+.modal-box input, .modal-box select, .modal-box textarea,
+.form-group input, .form-group select, .form-group textarea {
+  background: {{layer3}}; border:1px solid {{border}}; color: {{text}}; }
+.form-group label { color: {{muted}}; }
+.btn-primary { background: {{accent}}; color:#fff; }
+.btn-secondary { background: {{layer2}}; color: {{text}}; border:1px solid {{border}}; }
+.btn-secondary:hover { border-color: {{accent}}; }
+.context-menu { background: {{layer2}}; border:1px solid {{border}}; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+.context-item { color: {{text}}; }
+.context-item:hover { background: {{hover}}; }
+.context-divider { background: {{border}}; }
+.file-picker-box { background: {{layer2}}; }
+.file-picker-header span { color: {{text}}; }
+.file-picker-item { color: {{text}}; }
+.file-picker-item:hover { background: {{hover}}; }
+.file-picker-item.selected { background: {{active}}; color: {{text}}; }
+.marketplace-search input { background: {{layer3}}; color: {{text}}; border:1px solid {{border}}; }
+.marketplace-tab { color: {{muted}}; }
+.marketplace-tab.active { color: {{text}}; border-bottom-color: {{accent}}; }
+.marketplace-empty, .marketplace-loading { color: {{muted}}; }
+.skin-item { background: {{bg-base}}; border-color: {{border}}; }
+.skin-item:hover { border-color: {{muted}}; }
+.skin-item.active { border-color: {{accent}}; box-shadow:0 0 0 1px {{accent}}; }
+.skin-name { color: {{text}}; }
+.skin-badge { color: {{accent}}; border-color: {{accent}}; background: {{hover}}; }
+.skin-desc { color: {{muted}}; }
+.skin-repo { color: {{accent}}; }
+.skin-mode-btn { background: {{layer2}}; border-color: {{border}}; color: {{muted}}; }
+.skin-mode-btn:hover { border-color: {{accent}}; color: {{text}}; }
+.skin-mode-btn.on { background: {{accent}}; border-color: {{accent}}; color:#fff; }
+.skin-add-row input { background: {{layer3}}; border-color: {{border}}; color: {{text}}; }
+.skin-error { color:#e74c3c; }
+.homepage { background: {{bg-base}} !important; }
+.homepage-header h1 { color: {{text}} !important; }
+.homepage-header p { color: {{muted}} !important; }
+.homepage .search-box input { background: {{layer2}} !important; border-color: {{border}} !important; color: {{text}} !important; }
+.homepage .action-button { background: {{layer2}} !important; border-color: {{border}} !important; color: {{muted}} !important; }
+.homepage .action-button:hover { border-color: {{accent}} !important; }
+.homepage .action-button .icon { color: {{muted}} !important; }
+.sub-page { background: {{bg-base}} !important; }
+.sub-header { background: {{layer2}} !important; border-bottom:1px solid {{border}}; }
+.sub-header h2 { color: {{text}} !important; }
+.sub-form input { background: {{layer3}}; color: {{text}}; border:1px solid {{border}}; }
+.sub-form label { color: {{muted}}; }
+`;
+
+const LIGHT_FALLBACK: Palette = {
+  "--bg-base": "#f6f8fa", "--text": "#24292f",
+  "--bg-layer-2": "#ffffff", "--bg-layer-3": "#eaeef2",
+  "--border": "#d0d7de", "--interactive-bg-hover-solid": "#eaeef2",
+  "--interactive-bg-active": "#ddf4ff", "--label-secondary": "#57606a",
+  "--brand-primary": "#0969da",
+};
+const DARK_FALLBACK: Palette = {
+  "--bg-base": "#0d1117", "--text": "#e6edf3",
+  "--bg-layer-2": "#161b22", "--bg-layer-3": "#010409",
+  "--border": "#30363d", "--interactive-bg-hover-solid": "#21262d",
+  "--interactive-bg-active": "#1f6feb", "--label-secondary": "#8b949e",
+  "--brand-primary": "#58a6ff",
+};
+
+function paletteToCss(p: Palette, fallback: Palette): string {
+  const v = (key: string) => p[key] || fallback[key] || "";
+  return SKIN_TEMPLATE
+    .split("{{bg-base}}").join(v("--bg-base"))
+    .split("{{text}}").join(v("--text"))
+    .split("{{layer2}}").join(v("--bg-layer-2"))
+    .split("{{layer3}}").join(v("--bg-layer-3"))
+    .split("{{border}}").join(v("--border"))
+    .split("{{hover}}").join(v("--interactive-bg-hover-solid"))
+    .split("{{active}}").join(v("--interactive-bg-active"))
+    .split("{{muted}}").join(v("--label-secondary"))
+    .split("{{accent}}").join(v("--brand-primary"));
+}
+
+/** DeepKing 调色板 CSS → { light, dark } 皮肤 CSS；不是调色板格式时返回 null */
+export function convertPaletteToSkin(css: string): { light: string; dark: string } | null {
+  const palette = extractPalette(css);
+  if (!palette) return null;
+  const light = paletteToCss(palette.light, LIGHT_FALLBACK);
+  const dark = paletteToCss(Object.keys(palette.dark).length ? palette.dark : palette.light, DARK_FALLBACK);
+  return { light, dark };
+}
