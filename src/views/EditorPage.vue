@@ -159,6 +159,12 @@
         <!-- AI问答区 -->
         <div class="ai-panel-content" :class="{ active: aiTab === 'chat' }" id="aiChatPanel">
           <div class="ai-chat" ref="aiChatRef">
+            <div v-if="store.activeSkinPortrait" class="skin-portrait-wrap">
+              <img v-show="!skinPortraitCollapsed" :src="store.activeSkinPortrait" class="skin-portrait" alt="皮肤立绘" />
+              <button class="skin-portrait-toggle" @click="toggleSkinPortrait">
+                {{ skinPortraitCollapsed ? '▸ 展开立绘' : '▾ 收起立绘' }}
+              </button>
+            </div>
             <div v-if="!store.displayMessages.length && !store.isLoading" class="message ai-message">欢迎使用AI助手！请先在下方选择或配置AI模型。</div>
             <div v-for="(msg, i) in store.displayMessages" :key="i" class="message" :class="msgClass(msg.role)">
               <div class="msg-role">{{ roleLabel(msg.role) }}</div>
@@ -645,6 +651,11 @@ const marketplaceLoading = ref(false);
 
 // UI Skin（照搬 DeepKing：内置皮肤 + GitHub 仓库"转换并添加"）
 const skinRepoUrl = ref("");
+const skinPortraitCollapsed = ref(localStorage.getItem("skinPortraitCollapsed") === "1");
+function toggleSkinPortrait() {
+  skinPortraitCollapsed.value = !skinPortraitCollapsed.value;
+  localStorage.setItem("skinPortraitCollapsed", skinPortraitCollapsed.value ? "1" : "0");
+}
 async function addSkinFromRepo() {
   if (!skinRepoUrl.value.trim()) return;
   try {

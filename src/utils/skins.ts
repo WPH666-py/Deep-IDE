@@ -14,6 +14,7 @@ export interface UISkin {
   cssLight?: string;
   cssDark?: string;
   css?: string; // 单产物自定义皮肤
+  portrait?: string; // 立绘 data URL
 }
 
 /** GitHub 官方配色（亮） */
@@ -256,19 +257,42 @@ export const BUILTIN_SKINS: UISkin[] = [
 
 let styleEl: HTMLStyleElement | null = null;
 
-/** 应用皮肤 CSS（null 恢复默认） */
-export function applyUISkinCss(css: string | null | undefined) {
-  if (css) {
-    if (!styleEl) {
-      styleEl = document.createElement("style");
-      styleEl.id = "deep-ide-ui-skin";
-      document.head.appendChild(styleEl);
-    }
-    styleEl.textContent = css;
-  } else {
-    styleEl?.remove();
-    styleEl = null;
+/**
+ * 样式缓存：每种皮肤配色只创建一次 <style>，切换时仅 toggle disabled，
+ * 避免每次切换都重建 CSS 文本（重建会触发全页重新解析，造成卡顿）。
+ */
+const skinStyleCache = new Map<string, HTMLStyleElement>();
+let currentSkinStyle: HTMLStyleElement | null = null;
+
+function makeStyleEl(key: string, css: string, disabled: boolean): HTMLStyleElement {
+  const el = document.createElement("style");
+  el.id = "deep-ide-ui-skin-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
+  el.textContent = css;
+  el.disabled = disabled;
+  document.head.appendChild(el);
+  return el;
+}
+
+/** 预创建样式（disabled），切换时零解析 */
+export function prewarmUISkinCss(css: string | null | undefined, key: string) {
+  if (!css || skinStyleCache.has(key)) return;
+  skinStyleCache.set(key, makeStyleEl(key, css, true));
+}
+
+/** 应用皮肤 CSS（null 恢复默认）；key = "皮肤id@配色" */
+export function applyUISkinCss(css: string | null | undefined, key = "skin") {
+  if (currentSkinStyle) {
+    currentSkinStyle.disabled = true;
+    currentSkinStyle = null;
   }
+  if (!css) return;
+  let el = skinStyleCache.get(key);
+  if (!el) {
+    el = makeStyleEl(key, css, false);
+    skinStyleCache.set(key, el);
+  }
+  el.disabled = false;
+  currentSkinStyle = el;
 }
 
 /** 根据皮肤定义取对应配色的 CSS */

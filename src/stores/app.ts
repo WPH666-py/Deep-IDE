@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { tauriAPI, type ModeInfo, type Message, type AgentDef, type FileEntry } from "../services/tauri-api";
 import type { EditorTheme } from "../utils/codemirror";
-import { BUILTIN_SKINS, applyUISkinCss, skinCssFor, convertPaletteToSkin, type UISkin } from "../utils/skins";
+import { BUILTIN_SKINS, applyUISkinCss, prewarmUISkinCss, skinCssFor, convertPaletteToSkin, type UISkin } from "../utils/skins";
 
 export const useAppStore = defineStore("app", () => {
   const currentProject = ref<string | null>(null);
@@ -40,12 +40,18 @@ export const useAppStore = defineStore("app", () => {
     if (!id) return null;
     return allSkins.value.find(s => s.id === id) || null;
   }
+  const activeSkinPortrait = computed<string>(() => findSkin(uiSkinId.value)?.portrait || "");
   function applyUISkin(id: string, variant?: "light" | "dark") {
     uiSkinId.value = id;
     if (variant) uiSkinVariant.value = variant;
     localStorage.setItem("uiSkinId", id);
     localStorage.setItem("uiSkinVariant", uiSkinVariant.value);
-    applyUISkinCss(skinCssFor(findSkin(id), uiSkinVariant.value));
+    const skin = findSkin(id);
+    const key = `${id}@${uiSkinVariant.value}`;
+    applyUISkinCss(skinCssFor(skin, uiSkinVariant.value), key);
+    // 预创建同一皮肤的另一种配色，来回切换零解析
+    const otherVariant: "light" | "dark" = uiSkinVariant.value === "dark" ? "light" : "dark";
+    prewarmUISkinCss(skinCssFor(skin, otherVariant), `${id}@${otherVariant}`);
   }
   async function addCustomSkinFromRepo(repoUrl: string) {
     const url = repoUrl.trim();
@@ -60,6 +66,7 @@ export const useAppStore = defineStore("app", () => {
         desc: result.tagline || (result.palette ? `来自 ${result.repo}（DeepKing 调色板 ${result.file}）` : `来自 ${result.repo}（${result.file}）`),
         source: "custom",
         repo: result.repo,
+        portrait: result.portrait || undefined,
       };
       // DeepKing 调色板 → 生成亮/暗两套映射到本应用界面的皮肤
       const converted = result.palette ? convertPaletteToSkin(result.css) : null;
@@ -386,7 +393,7 @@ export const useAppStore = defineStore("app", () => {
     toolCalls, agentIterations, agentMaxIterations, useTools,
     setEditorTheme,
     checkSafety,
-    uiSkinId, uiSkinVariant, customSkins, allSkins, skinLoading, skinError,
+    uiSkinId, uiSkinVariant, customSkins, allSkins, skinLoading, skinError, activeSkinPortrait,
     applyUISkin, addCustomSkinFromRepo, removeCustomSkin,
   };
 });
