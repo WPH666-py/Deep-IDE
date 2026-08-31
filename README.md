@@ -4,6 +4,7 @@
 > 用最简洁的架构，做最牛逼的产品！— 水哥
 
 ---
+<img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/66274499-a98d-489e-a382-01efd73ce014" />
 
 # 一、中文说明（约 2000 字）
 
@@ -59,6 +60,10 @@ AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepK
 
 **什么是 Persona 注入**：Persona 注入（Persona Injection）是一种提示工程（Prompt Engineering）方法。Deep-IDE 实际只调用 DeepSeek 这一个真实大模型，但借助本地离线的 Persona 配置——每个模式对应一个目录，内含 `persona.toml` 及多份 Markdown 知识文件——在每次请求前动态组装 System Prompt。Prompt 组装器会按权重把「身份设定、编码风格、审查清单、架构思维、协作模式、任务工作流」等内容注入系统提示词，让同一个底层模型表现出截然不同的"性格"与工作风格。这种注入完全离线，不额外调用其他模型，只消耗 DeepSeek Token。
 
+<img width="2662" height="1797" alt="image" src="https://github.com/user-attachments/assets/f008ced8-6893-44e3-840b-6a102c0fe87e" />
+<img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/3e3b4406-8ed9-4d2d-ac6e-3abed4940543" />
+<img width="2386" height="1194" alt="image" src="https://github.com/user-attachments/assets/d57e67c0-d201-4f50-a6b9-cb83827356e9" />
+
 **五种模式分别对应什么**：
 
 - **DeepAnth** —— 模拟 Anthropic 的 Claude，安全审查极严、架构先行、防御式编码，适合安全审计与复杂重构。
@@ -110,6 +115,8 @@ Deep-IDE is a next-generation agentic integrated development environment (IDE) d
 
 The core philosophy of Deep-IDE is "simple architecture, ultimate experience." The backend is built with Rust and Tauri 2, while the frontend uses Vue 3 and TypeScript, delivering near-native startup speed and extremely low memory footprint, while avoiding the bloated size and performance issues commonly associated with Electron-based applications. Whether you are a student, an independent developer, or a team engineer, Deep-IDE lets you complete the entire workflow — "create a project → edit code → AI-assisted development → run and debug → commit to version control" — all within a single window.
 
+**Development Motivation**: During real-world development, the author observed that mainstream IDEs are either bloated or have fragmented AI capabilities — users often have to switch frequently between an editor, an AI chat tool, a command-line terminal, and a file parsing tool, which is inefficient and prone to losing context. Meanwhile, although there are many AI programming assistants on the market, most require separate subscriptions per model, which is costly and stylistically rigid. The starting point of Deep-IDE was to use a "single DeepSeek runtime + offline Persona injection" architecture to unify editing, AI assistance, multi-agent tool calling, file execution, and version control within a single desktop window — allowing different model experiences to be switched with one click, customized on demand, while keeping usage cost to a minimum.
+
 ## 2. Core Features
 
 - **Cross-platform desktop application**: Built on Tauri 2, supporting Windows, macOS, and Linux, with a native NSIS installer provided for Windows.
@@ -128,6 +135,8 @@ The core philosophy of Deep-IDE is "simple architecture, ultimate experience." T
 
 Deep-IDE uses a layered front-end/back-end architecture. The front end is built with Vue 3 + TypeScript + Vite, uses CodeMirror 6 for editing, and Pinia for state management; the back end implements Tauri commands in Rust and communicates with the front end through IPC. The file parsing module makes heavy use of pure Rust libraries: Excel via calamine, Word and PowerPoint via zip + XML parsing, and text files via `std::fs` with automatic UTF-8 / UTF-16 / GBK encoding detection. PDF files are handled by a bundled Python pymupdf fallback. All subprocesses are hidden using the `CREATE_NO_WINDOW` flag to prevent black command-line windows from appearing.
 
+**How multimodal support works**: Deep-IDE implements "multimodal context" through a unified file parsing entry point. Plain-text and code files support automatic UTF-8 / UTF-16 / GBK encoding detection; Excel is parsed with the pure Rust library calamine, Word / PowerPoint via zip + XML text extraction, and PDF through a bundled Python pymupdf fallback. Although images do not have their pixels read, they are injected into the context as a placeholder description of "path + format + size" for the AI to reference. All parsed results are uniformly converted into structured text (including format name, byte count, truncation flag, and other fields); files over 80 KB are truncated to "first and last 40 KB each", and then assembled into the System Prompt by the prompt assembler, allowing the AI to "understand" various formats such as code, documents, spreadsheets, slides, and PDFs.
+
 ## 4. Quick Start
 
 1. Download and install the Deep-IDE installer (an NSIS installer on Windows).
@@ -138,48 +147,62 @@ Deep-IDE uses a layered front-end/back-end architecture. The front end is built 
 
 ## 5. Feature Details
 
-### 5.1 项目管理
+### 5.1 Project Management
 
-“开始”菜单允许您创建或打开项目。项目列表清晰地显示了“对话/编程”模式，进入项目后，顶部栏还会显示当前项目及模式，让您一目了然地确认上下文。
+The "Start" menu lets you create or open projects. The project list clearly displays the "Conversation / Programming" mode, and after entering a project the top bar also shows the current project and mode, making it easy to confirm context at a glance.
 
-### 5.2 文件编辑
+### 5.2 File Editing
 
-编辑器支持多标签页切换、保存以及另存为功能。文件树的右键菜单提供完整操作，包括新建文件、新建文件夹、重命名、复制路径、剪切、复制、粘贴和删除等。所有文件操作均限定在项目目录内，以确保安全与可控性。
+The editor supports multi-tab switching, saving, and save-as. The file tree context menu provides complete operations including new file, new folder, rename, copy path, cut, copy, paste, and delete. All file operations are restricted to the project directory for safety and control.
 
-### 5.3 AI 助手与多种模式
+### 5.3 AI Assistant and Multiple Modes
 
-该AI助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi）。每种模式通过离线Persona注入，模拟不同的开发风格：DeepAnth注重安全评审与架构优先，DeepOAI强调快速迭代与组件化，DeepGem侧重长上下文的全局分析，DeepQwen突出中文优化与多角色协作，而DeepKimi则强调逐步推理与任务分解。所有模式均消耗DeepSeek令牌。
+The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi). Each mode simulates a different development style through offline Persona injection, and all modes consume DeepSeek tokens.
 
-### 5.4 工具调用代理循环
+**What is Persona injection?** Persona Injection is a prompt engineering method. Deep-IDE actually calls only one real large model — DeepSeek — but relies on local offline Persona configurations (each mode corresponds to a directory containing `persona.toml` plus multiple Markdown knowledge files) to dynamically assemble the System Prompt before every request. The prompt assembler injects "identity setting, coding style, review checklist, architectural thinking, collaboration patterns, and task workflows" into the system prompt according to their weights, making the same underlying model exhibit entirely different "personalities" and working styles. This injection is fully offline, does not call any other model, and only consumes DeepSeek tokens.
 
-启用“工具”后，AI 即可进入智能体循环模式，自动调用读写文件、执行命令、安装依赖等工具。在“工具”下拉菜单中，实时显示工具名称、参数及执行结果，并支持展开查看完整详情。
+<img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/11baf28c-4c4b-4ba2-8c00-93f1266fc9a6" />
+<img width="2683" height="1796" alt="image" src="https://github.com/user-attachments/assets/d92cbd7a-ef9e-44ff-bb5c-2f88b07d6827" />
+<img width="2387" height="1194" alt="image" src="https://github.com/user-attachments/assets/8a0efb7e-71d5-4fbd-810e-b052758167a3" />
 
-### 5.5 运行文件
+**What do the five modes correspond to?**
 
-顶部栏允许您选择运行时环境和要执行的文件。系统会根据文件扩展名自动选用合适的解释器或编译器。输出会实时流式传输到底部的终端；Python 会强制使用 UTF-8 编码以避免中文乱码，同时所有编译/运行子进程窗口均被隐藏。
+- **DeepAnth** — Emulates Anthropic's Claude: extremely strict security review, architecture-first, defensive coding; ideal for security audits and complex refactoring.
+- **DeepOAI** — Emulates OpenAI's GPT: rapid iteration, pragmatism, componentized thinking; ideal for quick prototyping and feature development.
+- **DeepGem** — Emulates Google's Gemini: global perspective, parallel analysis, long-context understanding; ideal for large codebase analysis.
+- **DeepQwen** — Emulates Alibaba's Qwen: multi-angle collaboration, Chinese optimization, agent-centric; ideal for Chinese projects and multi-role collaboration.
+- **DeepKimi** — Emulates Moonshot AI's Kimi: step-by-step reasoning, task decomposition, lossless long context; ideal for very long documents and structured analysis.
 
-### 5.6 终端
+### 5.4 Tool Calling Agent Loop
 
-底部终端支持命令输入与输出查看，并提供“导出”、“复制”和“清空”按钮。终端输入会自动获得焦点，以便实现连续输入。
+After enabling "🛠 Tools", the AI can enter Agent Loop mode, automatically invoking tools such as reading/writing files, executing commands, and installing dependencies. The "Tools" dropdown displays tool names, parameters, and execution results in real time, with expandable views for complete details.
 
-### 5.7 Git集成
+### 5.5 Running Files
 
-“Git 提交”对话框支持输入 GitHub 用户名、令牌、目标仓库、分支以及提交信息，可一键推送到远程仓库，并可选择先检查仓库状态。
+The top bar lets you select the runtime and the file to run. The system automatically chooses the correct interpreter or compiler based on the file extension. Output is streamed into the bottom terminal in real time; Python forces UTF-8 output to avoid Chinese garbling, and all compile/run subprocess windows are hidden.
 
-### 5.8 插件市场
+### 5.6 Terminal
+
+The bottom terminal supports command input and output viewing, and provides "Export", "Copy", and "Clear" buttons. The terminal input automatically focuses to enable continuous typing.
+
+### 5.7 Git Integration
+
+The "Git Commit" dialog supports entering a GitHub username, token, target repository, branch, and commit message, pushing to a remote repository with one click, and optionally checking repository status first.
+
+###5.8 插件市场
 
 该软件与插件市场对接 VS Code 插件市场，支持按相关性、下载量、评分等多维度排序搜索。界面展示插件图标、名称、发布者及简介，并提供一键安装功能，安装包将本地存储。
 
-## 6. 运行时环境支持
+##6. 运行时环境支持
 
 Deep-IDE 提供了增强的运行时检测功能，能够自动扫描 C、D、E 盘上的 PATH 环境变量及常见安装目录，识别 Python、Node.js、npm、Java、Go、Rust、gcc、git、Docker、PHP、.NET 等工具及其版本，并在顶部下拉菜单中以“✓ / ✗”标记其可用状态。
 
-## 7. 关于作者与联系方式
+##7. 关于作者与联系方式
 
-- **作者（昵称）**：水哥
+**：水哥
 - **毕业院校**：青岛理工大学，2022届毕业生
 - **联系方式**：943050454@qq.com
-- **项目理念**：Deep IDE——新一代智能体驱动的集成开发环境。以最简洁的架构，打造最卓越的产品！
+- **项目理念**：Deep IDE——新一代智能体集成开发环境。以最简洁的架构，打造最出色的产品！
 
 如有任何问题、建议或合作需求，欢迎通过上述邮箱联系水哥。
 
