@@ -438,6 +438,39 @@
             </select>
           </div>
           <div class="form-group" style="margin-top:1.5rem">
+            <label>界面皮肤 / UI Skin（覆盖文件树、编辑区、AI 区域）</label>
+            <div class="skin-list">
+              <div class="skin-item" :class="{ active: store.uiSkinId === '' }" @click="store.applyUISkin('')">
+                <div class="skin-info">
+                  <div class="skin-name">默认</div>
+                  <div class="skin-desc">Deep IDE 原生浅色界面</div>
+                </div>
+              </div>
+              <div v-for="skin in store.allSkins" :key="skin.id" class="skin-item" :class="{ active: store.uiSkinId === skin.id }">
+                <div class="skin-info">
+                  <div class="skin-name">
+                    {{ skin.name }}
+                    <span v-if="skin.source === 'builtin'" class="skin-badge">内置</span>
+                  </div>
+                  <div class="skin-desc">{{ skin.desc }}</div>
+                  <div v-if="skin.repo" class="skin-repo">{{ skin.repo }}</div>
+                </div>
+                <div class="skin-actions">
+                  <button v-if="skin.cssLight" class="skin-mode-btn" :class="{ on: store.uiSkinId === skin.id && store.uiSkinVariant === 'light' }" @click="store.applyUISkin(skin.id, 'light')">亮</button>
+                  <button v-if="skin.cssDark" class="skin-mode-btn" :class="{ on: store.uiSkinId === skin.id && store.uiSkinVariant === 'dark' }" @click="store.applyUISkin(skin.id, 'dark')">暗</button>
+                  <span v-if="skin.source === 'custom'" class="skin-remove" title="移除皮肤" @click="store.removeCustomSkin(skin.id)">×</span>
+                </div>
+              </div>
+            </div>
+            <div class="skin-add-row">
+              <input v-model="skinRepoUrl" placeholder="输入 GitHub 仓库地址, 如 https://github.com/owner/repo" @keyup.enter="addSkinFromRepo" />
+              <button class="btn btn-primary skin-add-btn" @click="addSkinFromRepo" :disabled="skinLoading || !skinRepoUrl.trim()">
+                {{ skinLoading ? '转换中...' : '转换并添加' }}
+              </button>
+            </div>
+            <div v-if="store.skinError" class="skin-error">{{ store.skinError }}</div>
+          </div>
+          <div class="form-group" style="margin-top:1.5rem">
             <label style="font-weight:500;color:#333">AI 模式说明</label>
             <div style="margin-top:0.5rem;font-size:0.82rem;color:#666;line-height:1.6">
               <div style="margin-bottom:0.6rem">
@@ -609,6 +642,16 @@ const marketplaceSearch = ref("");
 const marketplaceSortBy = ref("0");
 const marketplaceTab = ref("popular");
 const marketplaceLoading = ref(false);
+
+// UI Skin（照搬 DeepKing：内置皮肤 + GitHub 仓库"转换并添加"）
+const skinRepoUrl = ref("");
+async function addSkinFromRepo() {
+  if (!skinRepoUrl.value.trim()) return;
+  try {
+    await store.addCustomSkinFromRepo(skinRepoUrl.value);
+    skinRepoUrl.value = "";
+  } catch (_) { /* 错误已写入 store.skinError */ }
+}
 
 // Git push
 const gitLocalPath = ref(store.currentProject || "");

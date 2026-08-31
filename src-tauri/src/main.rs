@@ -71,6 +71,8 @@ fn main() {
             // CLI 桥接
             cli::check_deepseek_cli,
             cli::run_cli_agent_task,
+            // UI Skin
+            commands::fetch_github_skin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Deep IDE");

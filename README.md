@@ -24,6 +24,7 @@ Deep-IDE 的核心理念是「简洁架构 + 极致体验」。底层采用 Rust
 
 - **跨平台桌面应用**：基于 Tauri 2，支持 Windows、macOS 与 Linux，Windows 端提供原生 NSIS 安装包。
 - **多标签代码编辑器**：内置 CodeMirror 编辑器，支持语法高亮、主题切换（经典纯白 / 护眼淡绿 / 深色专业 / GitHub 深色）与多种编程语言。
+- **界面皮肤换肤**：DeepKing 同款「界面皮肤 / UI Skin」接口，内置 GitHub 灰蓝配色（亮/暗两套，覆盖文件树、编辑区、AI 区域），支持粘贴任意 GitHub 仓库地址"转换并添加"自定义皮肤。
 - **文件树与资源管理**：完整的文件树浏览、新建/重命名/删除/复制/剪切/粘贴，支持拖拽调整面板宽度。
 - **多智能体 AI 助手**：内置 DeepAnth、DeepOAI、DeepGem、DeepQwen、DeepKimi 五种离线 Persona 工作流，统一走 DeepSeek 大模型运行时。
 - **Agent Loop 工具调用**：提供 Claude Code / Cursor 风格的九工具 Agent 循环，支持实时代码读写、命令行执行、依赖安装等自动化操作。
@@ -125,6 +126,7 @@ The core philosophy of Deep-IDE is "simple architecture, ultimate experience." T
 
 - **Cross-platform desktop application**: Built on Tauri 2, supporting Windows, macOS, and Linux, with a native NSIS installer provided for Windows.
 - **Multi-tab code editor**: Ships with a CodeMirror-based editor featuring syntax highlighting, theme switching (Classic White / Eye-friendly Green / Professional Dark / GitHub Dark), and support for many programming languages.
+- **UI Skin system**: DeepKing-style "UI Skin" interface with built-in GitHub light/dark skins (covering the file tree, editor area and AI panel), plus pasting any GitHub repo URL to convert it into a custom skin.
 - **File tree and resource management**: A complete file tree browser with create, rename, delete, copy, cut, and paste operations, plus draggable panel resizing.
 - **Multi-agent AI assistant**: Five offline Persona workflows — DeepAnth, DeepOAI, DeepGem, DeepQwen, and DeepKimi — all unified through the DeepSeek large model runtime.
 - **Agent Loop tool calling**: Provides a Claude Code / Cursor-style nine-tool agent loop with real-time code reading and writing, command-line execution, and dependency installation automations.

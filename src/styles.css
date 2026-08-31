@@ -290,6 +290,25 @@ body {
 .code-editor .cm-editor .cm-content {
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
+/* ─── 界面皮肤 / UI Skin 设置（DeepKing 同款） ─── */
+.skin-list { display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto; margin-top:0.6rem; }
+.skin-item { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; background:#fff; transition:border-color .2s; }
+.skin-item:hover { border-color:#aaa; }
+.skin-item.active { border-color:#007acc; box-shadow:0 0 0 1px #007acc; }
+.skin-name { font-weight:600; color:#333; font-size:0.9rem; display:flex; align-items:center; gap:6px; }
+.skin-badge { font-size:0.68rem; font-weight:500; color:#007acc; border:1px solid #007acc; border-radius:3px; padding:0 4px; background:#e8f4fd; }
+.skin-desc { font-size:0.78rem; color:#888; margin-top:2px; line-height:1.5; }
+.skin-repo { font-size:0.72rem; color:#555; font-family:monospace; margin-top:2px; }
+.skin-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.skin-mode-btn { padding:3px 10px; font-size:0.75rem; border:1px solid #ddd; border-radius:4px; background:#fff; color:#666; cursor:pointer; }
+.skin-mode-btn:hover { border-color:#aaa; color:#333; }
+.skin-mode-btn.on { background:#007acc; border-color:#007acc; color:#fff; }
+.skin-remove { color:#ccc; cursor:pointer; font-size:1rem; line-height:1; padding:0 4px; }
+.skin-remove:hover { color:#e74c3c; }
+.skin-add-row { display:flex; gap:8px; margin-top:10px; }
+.skin-add-row input { flex:1; padding:0.5rem 0.7rem; border:1px solid #e0e0e0; border-radius:6px; font-size:0.82rem; outline:none; box-sizing:border-box; }
+.skin-add-btn { flex-shrink:0; padding:0.5rem 1rem; font-size:0.82rem; }
+.skin-error { margin-top:6px; color:#e74c3c; font-size:0.78rem; }
 .ai-panel {
     width: 320px; min-width: 260px; max-width: 500px;
     background: #fafafa; border-left: 1px solid #eee;

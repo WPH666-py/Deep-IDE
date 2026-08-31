@@ -98,4 +98,7 @@ export const tauriAPI = {
   // ─── CLI 桥接 ───
   checkDeepSeekCli: () => invoke<{available:boolean;version:string|null;install_hint:string|null}>("check_deepseek_cli"),
   runCliAgentTask: (workspace: string, task: string, personaPrompt: string, apiKey: string) => invoke<{success:boolean;output:string;error:string|null}>("run_cli_agent_task", { workspace, task, personaPrompt, apiKey }),
+
+  // ─── UI Skin 从 GitHub 仓库拉取 ───
+  fetchGithubSkin: (repoUrl: string) => invoke<{repo:string;file:string;css:string}>("fetch_github_skin", { repoUrl }),
 };

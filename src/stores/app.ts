@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { tauriAPI, type ModeInfo, type Message, type AgentDef, type FileEntry } from "../services/tauri-api";
 import type { EditorTheme } from "../utils/codemirror";
+import { BUILTIN_SKINS, applyUISkinCss, skinCssFor, type UISkin } from "../utils/skins";
 
 export const useAppStore = defineStore("app", () => {
   const currentProject = ref<string | null>(null);
@@ -13,6 +14,73 @@ export const useAppStore = defineStore("app", () => {
   const validThemes: EditorTheme[] = ["classic", "green", "dark", "github"];
   const savedTheme = localStorage.getItem("editorTheme") as EditorTheme | null;
   const editorTheme = ref<EditorTheme>(savedTheme && validThemes.includes(savedTheme) ? savedTheme : "classic");
+
+  // ─── UI Skin（界面皮肤，覆盖文件树/编辑区/AI 区域）───
+  const uiSkinId = ref<string>(localStorage.getItem("uiSkinId") || "");
+  const uiSkinVariant = ref<"light" | "dark">(localStorage.getItem("uiSkinVariant") === "dark" ? "dark" : "light");
+  const customSkins = ref<UISkin[]>([]);
+  const skinLoading = ref(false);
+  const skinError = ref("");
+
+  function loadCustomSkins() {
+    try {
+      const saved = localStorage.getItem("deep-ide-custom-skins");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) customSkins.value = parsed;
+      }
+    } catch (_) { customSkins.value = []; }
+  }
+  function saveCustomSkins() {
+    localStorage.setItem("deep-ide-custom-skins", JSON.stringify(customSkins.value));
+  }
+  const allSkins = computed<UISkin[]>(() => [...BUILTIN_SKINS, ...customSkins.value]);
+
+  function findSkin(id: string): UISkin | null {
+    if (!id) return null;
+    return allSkins.value.find(s => s.id === id) || null;
+  }
+  function applyUISkin(id: string, variant?: "light" | "dark") {
+    uiSkinId.value = id;
+    if (variant) uiSkinVariant.value = variant;
+    localStorage.setItem("uiSkinId", id);
+    localStorage.setItem("uiSkinVariant", uiSkinVariant.value);
+    applyUISkinCss(skinCssFor(findSkin(id), uiSkinVariant.value));
+  }
+  async function addCustomSkinFromRepo(repoUrl: string) {
+    const url = repoUrl.trim();
+    if (!url) return;
+    skinLoading.value = true;
+    skinError.value = "";
+    try {
+      const result = await tauriAPI.fetchGithubSkin(url);
+      const skin: UISkin = {
+        id: "custom-" + Math.random().toString(36).slice(2, 8),
+        name: result.repo.split("/").pop() || result.repo,
+        desc: `来自 ${result.repo}（${result.file}）`,
+        source: "custom",
+        repo: result.repo,
+      };
+      if (result.file.includes("dark")) skin.cssDark = result.css;
+      else if (result.file.includes("light")) skin.cssLight = result.css;
+      else { skin.cssLight = result.css; skin.cssDark = result.css; }
+      customSkins.value.push(skin);
+      saveCustomSkins();
+      applyUISkin(skin.id, result.file.includes("dark") ? "dark" : "light");
+    } catch (e: any) {
+      skinError.value = String(e);
+      throw e;
+    } finally {
+      skinLoading.value = false;
+    }
+  }
+  function removeCustomSkin(id: string) {
+    customSkins.value = customSkins.value.filter(s => s.id !== id);
+    saveCustomSkins();
+    if (uiSkinId.value === id) applyUISkin("");
+  }
+  loadCustomSkins();
+  applyUISkin(uiSkinId.value);
 
   // Persona 信息
   const personaInfo = ref<ModeInfo | null>(null);
@@ -312,5 +380,7 @@ export const useAppStore = defineStore("app", () => {
     toolCalls, agentIterations, agentMaxIterations, useTools,
     setEditorTheme,
     checkSafety,
+    uiSkinId, uiSkinVariant, customSkins, allSkins, skinLoading, skinError,
+    applyUISkin, addCustomSkinFromRepo, removeCustomSkin,
   };
 });
