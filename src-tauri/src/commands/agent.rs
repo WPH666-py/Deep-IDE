@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::ai::{AgentDefinition, SafetyHooks, ContextCompressor, CompressedMessage};
-use crate::ai::{DeepSeekClient, PersonaLoader, PromptAssembler, TaskType, Message};
+use crate::ai::{build_system_prompt, DeepSeekClient, Message};
 
 /// 列出所有内置 Agent
 #[tauri::command]
@@ -16,20 +16,18 @@ pub async fn send_agent_message(
     mode: String,
     message: String,
     history: Vec<Message>,
-    persona_loader: State<'_, PersonaLoader>,
     ds_client: State<'_, DeepSeekClient>,
 ) -> Result<serde_json::Value, String> {
     // 1. 获取 Agent 定义
     let agent = AgentDefinition::find(&agent_name)
         .ok_or_else(|| format!("Agent '{}' not found. Available: code-explorer, code-architect, code-reviewer", agent_name))?;
 
-    // 2. 加载 Persona
-    let persona_ctx = persona_loader.load(&mode)?;
+    // 2. 原生模式基础提示（无 Persona 注入；原装工作流源码以编译期资源嵌入）
+    let base_prompt = build_system_prompt(&mode, &[]);
 
-    // 3. 组装 System Prompt（Agent 定义 + Persona 风格）
-    let base_prompt = PromptAssembler::assemble(&persona_ctx, TaskType::CodeGeneration, &[]);
+    // 3. 组装 System Prompt（Agent 定义 + 原生模式提示）
     let system_prompt = format!(
-        "{}\n\n---\n\n## Active Agent: {}\n{}\n\n## Agent Allowed Tools\n{}\n\nFollow the agent's specific workflow AND the persona's coding style.",
+        "{}\n\n---\n\n## Active Agent: {}\n{}\n\n## Agent Allowed Tools\n{}\n\nFollow the agent's specific workflow.",
         base_prompt,
         agent.name,
         agent.system_prompt,

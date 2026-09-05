@@ -460,17 +460,17 @@ body {
 }
 .ai-send-btn:hover { background: #555; }
 .ai-send-btn:disabled { background: #ccc; cursor: not-allowed; }
-/* Persona 信息展示栏 */
-.persona-info-bar {
+/* 模式信息展示栏 */
+.mode-info-bar {
     margin-top: 0.4rem; padding: 0.35rem 0.5rem; background: #f0f4fb;
     border-radius: 4px; display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem;
     align-items: center; font-size: 0.72rem; color: #555;
 }
-.persona-badge {
+.mode-badge {
     background: #007acc; color: #fff; padding: 0.15rem 0.45rem; border-radius: 3px;
     font-weight: 600; font-size: 0.7rem;
 }
-.persona-detail { white-space: nowrap; }
+.mode-detail { white-space: nowrap; }
 .ai-context-bar {
     display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.3rem 0;
     min-height: 6px; align-items: center;

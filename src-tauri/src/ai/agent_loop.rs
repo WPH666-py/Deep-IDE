@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::ai::deepseek::{DeepSeekClient, Message};
-use crate::ai::persona::{PersonaContext, TaskType, PromptAssembler, ContextFile};
 use crate::ai::tools::{ToolRegistry, ToolCall, ToolResult, ToolSchema, detect_runtimes};
 
 /// ─── Agent Loop 配置 ───
@@ -131,7 +130,8 @@ pub struct AgentLoopInput {
     pub context_paths: Vec<String>,
     pub working_dir: PathBuf,
     pub deepseek: std::sync::Arc<DeepSeekClient>,
-    pub persona_ctx: PersonaContext,
+    /// 命令层组装好的原生 System Prompt（模式基础提示 + 原装工作流源码 + 上下文文件）
+    pub system_prompt: String,
 }
 
 pub struct AgentLoopOutput {
@@ -172,22 +172,12 @@ where
         &mut on_event,
     );
 
-    // 1. 组装 system prompt（预读所有上下文文件内容）
-    let context_files: Vec<ContextFile> = input.context_paths.iter()
-        .map(|p| {
-            let parsed = crate::ai::file_parser::parse_file(p);
-            ContextFile { path: p.clone(), content: Some(parsed.content) }
-        })
-        .collect();
+    // 1. 使用命令层组装好的原生 System Prompt（模式基础提示 + 原装工作流源码节选 +
+    //    上下文文件内容）
+    let mut system_prompt = input.system_prompt.clone();
 
-    let mut system_prompt = PromptAssembler::assemble(
-        &input.persona_ctx,
-        TaskType::CodeGeneration,
-        &context_files,
-    );
-
-    // 注入 persona 特有的循环规则
-    system_prompt.push_str(&persona_loop_directives(&input.mode, &config));
+    // 注入模式特有的引擎循环规则
+    system_prompt.push_str(&mode_loop_directives(&input.mode, &config));
 
     // 2. 初始化消息历史
     let mut messages: Vec<Message> = Vec::new();
@@ -426,12 +416,12 @@ where
 // 辅助函数
 // ════════════════════════════════════════════════════════
 
-fn persona_loop_directives(mode: &str, cfg: &LoopConfig) -> String {
+fn mode_loop_directives(mode: &str, cfg: &LoopConfig) -> String {
     let mut s = String::new();
-    s.push_str("\n\n## Agent Loop Directives (per persona)\n");
+    s.push_str("\n\n## Agent Loop Directives (per engine)\n");
 
-    // 通用规则（所有 persona 适用）
-    s.push_str("### Universal rules (apply to all personas)\n");
+    // 通用规则（所有引擎适用）
+    s.push_str("### Universal rules (apply to all engines)\n");
     s.push_str("- **Chunk long writes**: Any single `write` call's `content` MUST be <= 2000 characters. For longer files:\n");
     s.push_str("  1. First call `write` with the first chunk (creates the file).\n");
     s.push_str("  2. Then call `edit` with `old_string` set to the LAST ~10 lines of the previous chunk (must match exactly) and `new_string` set to those same lines + the next chunk appended.\n");
@@ -453,7 +443,7 @@ fn persona_loop_directives(mode: &str, cfg: &LoopConfig) -> String {
 
     match mode {
         "deep-anth" => {
-            s.push_str("You are running in **Claude Code style**:\n");
+            s.push_str("You are running the **DeepAnth** mode (Claude Code original workflow source):\n");
             s.push_str("- HARD PROTOCOL: Every `edit` / `write` MUST be preceded by `read` of the same file in this session.\n");
             s.push_str("- For multi-step tasks, FIRST call `todo_write` to plan.\n");
             s.push_str("- For any build/test/run, use `bash`. Do NOT use `read` to guess command output.\n");
@@ -468,28 +458,28 @@ fn persona_loop_directives(mode: &str, cfg: &LoopConfig) -> String {
             s.push_str("- **CRITICAL: Do NOT use bash to test `import <package>`** — that creates dozens of red error rows. Use `check_python_package` instead.\n");
         }
         "deep-oai" => {
-            s.push_str("You are running in **GPT-5 style**:\n");
+            s.push_str("You are running the **DeepOAI** mode (Codex CLI original workflow source):\n");
             s.push_str("- Plan → Generate → Review → Refine.\n");
             s.push_str("- Before generating code, briefly state your plan in the response.\n");
             s.push_str("- Every 5 iterations you'll be asked to check progress against the goal.\n");
             s.push_str("- Prefer minimal, runnable iterations. Verify after each step.\n");
         }
         "deep-gem" => {
-            s.push_str("You are running in **Gemini CLI style**:\n");
+            s.push_str("You are running the **DeepGem** mode (Gemini CLI original workflow source):\n");
             s.push_str("- For unfamiliar codebases, FIRST call `glob` + `grep` to build a mental map.\n");
             s.push_str("- Process large code in chunks: `read` with offset/limit, then synthesize.\n");
             s.push_str("- Use `grep` to find usages before editing shared functions.\n");
             s.push_str("- Be concise in explanations. Show code first, reasoning only when asked.\n");
         }
         "deep-qwen" => {
-            s.push_str("You are running in **Qwen3-Coder style**:\n");
+            s.push_str("You are running the **DeepQwen** mode (Qwen Code original workflow source):\n");
             s.push_str("- For any non-trivial task, FIRST call `todo_write` to break it into subtasks.\n");
             s.push_str("- Mark subtasks `in_progress` before starting, `completed` after finishing.\n");
             s.push_str("- Mirror the existing project style: read similar files first, then write consistent code.\n");
             s.push_str("- Prefer complete, runnable code blocks over partial snippets.\n");
         }
         "deep-kimi" => {
-            s.push_str("You are running in **Kimi K2 style**:\n");
+            s.push_str("You are running the **DeepKimi** mode (Kimi CLI original workflow source):\n");
             s.push_str("- Before each action, briefly state your reasoning (1-2 sentences).\n");
             s.push_str("- For complex tasks: Plan → Step-by-step execution → Verify each step.\n");
             s.push_str("- Use long context fully: don't truncate, read large files in chunks if needed.\n");

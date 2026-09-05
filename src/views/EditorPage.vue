@@ -204,12 +204,12 @@
               <button class="ai-config-btn" @click="showAIConfigModal = true">配置</button>
               <button class="ai-send-btn" :disabled="store.isLoading || !chatInput.trim()" @click="handleSend">发送</button>
             </div>
-            <!-- Persona 信息展示 -->
-            <div v-if="store.personaInfo" class="persona-info-bar">
-              <span class="persona-badge">{{ store.personaInfo.name }}</span>
-              <span class="persona-detail">模拟: {{ store.personaInfo.emulated_model }}</span>
-              <span class="persona-detail">风格: {{ store.personaInfo.coding_style }}</span>
-              <span class="persona-detail">审查: {{ store.personaInfo.review_rigor }}</span>
+            <!-- 模式信息展示 -->
+            <div v-if="store.modeInfo" class="mode-info-bar">
+              <span class="mode-badge">{{ store.modeInfo.name }}</span>
+              <span class="mode-detail">原装工作流: {{ store.modeInfo.emulated_model }}</span>
+              <span class="mode-detail">风格: {{ store.modeInfo.coding_style }}</span>
+              <span class="mode-detail">审查: {{ store.modeInfo.review_rigor }}</span>
             </div>
           </div>
         </div>
@@ -481,14 +481,14 @@
             <label style="font-weight:500;color:#333">AI 模式说明</label>
             <div style="margin-top:0.5rem;font-size:0.82rem;color:#666;line-height:1.6">
               <div style="margin-bottom:0.6rem">
-                <b style="color:#333">DeepAnth</b> — 模拟 Claude Opus 4.8，安全审查极严，架构先行，防御性编码。适合安全审计、复杂重构。<br>
-                <b style="color:#333">DeepOAI</b> — 模拟 GPT-5.6，快速迭代，实用主义，组件化思维。适合快速原型、功能开发。<br>
-                <b style="color:#333">DeepGem</b> — 模拟 Gemini 3 Pro，全局视角，并行分析，长上下文理解。适合大代码库分析。<br>
-                <b style="color:#333">DeepQwen</b> — 模拟 Qwen 3.7，多角度协作，中文优化，Agent 中心。适合中文项目、多角色协作。<br>
-                <b style="color:#333">DeepKimi</b> — 模拟 Kimi K3，逐步推理，任务分解，无损长上下文。适合超长文档、结构化分析。
+                <b style="color:#333">DeepAnth</b> — 融合 Claude Code 原装工作流源码（Anthropic 官方 CLI 系统提示 + 工具契约），安全审查极严，架构先行。适合安全审计、复杂重构。<br>
+                <b style="color:#333">DeepOAI</b> — 融合 OpenAI Codex CLI (GPT-5.2) 原装指令模板与 pragmatic 人格，快速迭代，实用主义。适合快速原型、功能开发。<br>
+                <b style="color:#333">DeepGem</b> — 融合 Gemini CLI 原装系统提示源码（Core Mandates + Primary Workflows），全局视角，并行分析。适合大代码库分析。<br>
+                <b style="color:#333">DeepQwen</b> — 融合 Qwen Code 原装系统提示源码（Subagent Delegation + Task Agents），多角色协作，中文优先。适合中文项目、多角色协作。<br>
+                <b style="color:#333">DeepKimi</b> — 融合 Kimi Code CLI 原装 Agent 循环与压缩提示词，逐步推理，无损长上下文。适合超长文档、结构化分析。
               </div>
               <div style="font-size:0.78rem;color:#999">
-                所有模式均使用 DeepSeek V4 作为唯一运行时模型，通过离线 Persona 注入模拟不同工作流风格，只消耗 DeepSeek Token。
+                所有模式均使用 DeepSeek 作为唯一运行时模型；每种模式的 Persona 注入的是<b>原装工作流源码</b>（原始仓库真实代码节选，见 personas/&lt;vendor&gt;/workflow-source.md），与 DeepSeek 运行时真实代码（src-tauri/src/ai/*.rs）强强融合，只消耗 DeepSeek Token。
               </div>
             </div>
           </div>
@@ -528,7 +528,7 @@
         </div>
         <div class="modal-body">
           <p style="font-size:0.78rem;color:#888;margin-bottom:0.8rem">
-            Deep IDE 只有 DeepSeek V4 一个运行时模型。DeepAnth/DeepOAI/DeepGem/DeepQwen/DeepKimi 通过离线 Persona 注入模拟不同工作流风格，均走 DeepSeek Token。
+            Deep IDE 只有 DeepSeek 一个运行时模型。DeepAnth/DeepOAI/DeepGem/DeepQwen/DeepKimi 的 Persona 注入的是各厂商<b>原装工作流源码</b>（真实仓库代码节选 + DeepSeek 运行时真实代码融合），均走 DeepSeek Token。
           </p>
           <div class="config-field"><label>API Key</label><input type="password" v-model="apiKeyInput" placeholder="sk-..."></div>
           <div class="config-field"><label>Base URL</label><input v-model="baseUrlInput" placeholder="https://api.deepseek.com"></div>
@@ -680,11 +680,11 @@ const filePickerSelections = ref<Set<string>>(new Set());
 const filePickerRoot = ref("");
 
 const modes = [
-  { id: "deep-anth", name: "DeepAnth", desc: "Claude 审查+架构", tags: "严谨·安全优先·架构先行" },
-  { id: "deep-oai", name: "DeepOAI", desc: "GPT 快速迭代+重构", tags: "实用·迭代快·组件化" },
-  { id: "deep-gem", name: "DeepGem", desc: "Gemini 长上下文分析", tags: "全局视角·并行审查" },
-  { id: "deep-qwen", name: "DeepQwen", desc: "Qwen 多角度协作", tags: "中文优化·Agent中心" },
-  { id: "deep-kimi", name: "DeepKimi", desc: "Kimi 逐步推理+长上下文", tags: "方法导向·任务分解·无损长文" },
+  { id: "deep-anth", name: "DeepAnth", desc: "Claude Code 原装工作流", tags: "原装源码·安全优先·架构先行" },
+  { id: "deep-oai", name: "DeepOAI", desc: "Codex CLI 原装工作流", tags: "原装源码·实用·迭代快" },
+  { id: "deep-gem", name: "DeepGem", desc: "Gemini CLI 原装工作流", tags: "原装源码·全局视角·并行分析" },
+  { id: "deep-qwen", name: "DeepQwen", desc: "Qwen Code 原装工作流", tags: "原装源码·中文优化·多Agent" },
+  { id: "deep-kimi", name: "DeepKimi", desc: "Kimi CLI 原装工作流", tags: "原装源码·逐步推理·无损长文" },
 ];
 
 // ─── 监听 ───
@@ -724,7 +724,7 @@ onMounted(async () => {
   });
 
   await store.loadAgents();
-  if (store.apiKey && !store.personaInfo) await store.switchMode(store.currentMode || "deep-anth");
+  if (store.apiKey && !store.modeInfo) await store.switchMode(store.currentMode || "deep-anth");
   if (store.currentProject) {
     await store.loadFileTree(store.currentProject);
     detectRuntimes();

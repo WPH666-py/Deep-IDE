@@ -18,7 +18,7 @@ Deep-IDE 是一款面向现代开发者的新一代智能体集成开发环境�
 
 Deep-IDE 的核心理念是「简洁架构 + 极致体验」。底层采用 Rust 与 Tauri 2 构建，前端使用 Vue 3 与 TypeScript，实现了接近原生的启动速度与极低的内存占用，同时规避了 Electron 类应用常见的体积臃肿与性能损耗问题。无论你是学生、独立开发者还是团队工程师，Deep-IDE 都能在一个窗口内完成从「新建项目 → 编辑代码 → AI 辅助开发 → 运行调试 → 版本提交」的完整闭环。
 
-**开发动机**：作者在实际开发中发现，主流 IDE 要么功能臃肿、要么 AI 能力割裂——用户常常需要在编辑器、AI 对话工具、命令行终端与文件解析工具之间频繁切换，效率低且上下文容易丢失。与此同时，市面上的 AI 编程助手虽多，但大多按模型分别订阅，成本高且风格单一。Deep-IDE 的出发点，就是用「单一 DeepSeek 运行时 + 离线 Persona 注入」的架构，在同一个桌面窗口内整合编辑、AI 辅助、多智能体工具调用、文件运行与版本控制，让不同风格的模型体验可以一键切换、按需定制，同时把使用成本压到最低。
+**开发动机**：作者在实际开发中发现，主流 IDE 要么功能臃肿、要么 AI 能力割裂——用户常常需要在编辑器、AI 对话工具、命令行终端与文件解析工具之间频繁切换，效率低且上下文容易丢失。与此同时，市面上的 AI 编程助手虽多，但大多按模型分别订阅，成本高且风格单一。Deep-IDE 的出发点，就是用「单一 DeepSeek 运行时 + 原装工作流源码嵌入」的架构，在同一个桌面窗口内整合编辑、AI 辅助、多智能体工具调用、文件运行与版本控制，让不同原装工作流的体验可以一键切换、按需定制，同时把使用成本压到最低。
 
 ## 2. 核心特性
 
@@ -26,7 +26,7 @@ Deep-IDE 的核心理念是「简洁架构 + 极致体验」。底层采用 Rust
 - **多标签代码编辑器**：内置 CodeMirror 编辑器，支持语法高亮、主题切换（经典纯白 / 护眼淡绿 / 深色专业 / GitHub 深色）与多种编程语言。
 - **界面皮肤换肤**：DeepKing 同款「界面皮肤 / UI Skin」接口，内置 GitHub 灰蓝配色（亮/暗两套，覆盖文件树、编辑区、AI 区域），支持粘贴任意 GitHub 仓库地址"转换并添加"自定义皮肤。
 - **文件树与资源管理**：完整的文件树浏览、新建/重命名/删除/复制/剪切/粘贴，支持拖拽调整面板宽度。
-- **多智能体 AI 助手**：内置 DeepAnth、DeepOAI、DeepGem、DeepQwen、DeepKimi 五种离线 Persona 工作流，统一走 DeepSeek 大模型运行时。
+- **多智能体 AI 助手**：内置 DeepAnth、DeepOAI、DeepGem、DeepQwen、DeepKimi 五种原装工作流（原装工作流源码节选编译期嵌入，无 Persona 模拟层），统一走 DeepSeek 大模型运行时。
 - **Agent Loop 工具调用**：提供 Claude Code / Cursor 风格的九工具 Agent 循环，支持实时代码读写、命令行执行、依赖安装等自动化操作。
 - **多语言一键运行**：支持 Python、JavaScript、TypeScript、Java、Go、Rust、C、C++、C#、PHP、SQL、MATLAB、Shell 等多种语言文件的自动识别与运行。
 - **内置终端**：底部集成「终端 / 输出」面板，支持输入命令、查看运行结果、导出与复制输出。
@@ -61,9 +61,9 @@ Deep-IDE 采用前后端分层架构。前端使用 Vue 3 + TypeScript + Vite �
 
 ### 5.3 AI 助手与多模式
 
-AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi），每种模式通过离线 Persona 注入模拟不同的开发风格，所有模式统一消耗 DeepSeek Token。
+AI 助手支持五种工作流（DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi），每种模式的**原装工作流源码节选**以编译期资源形式嵌入（无 Persona 模拟层），所有模式统一消耗 DeepSeek Token。
 
-**什么是 Persona 注入**：Persona 注入（Persona Injection）是一种提示工程（Prompt Engineering）方法。Deep-IDE 实际只调用 DeepSeek 这一个真实大模型，但借助本地离线的 Persona 配置——每个模式对应一个目录，内含 `persona.toml` 及多份 Markdown 知识文件——在每次请求前动态组装 System Prompt。Prompt 组装器会按权重把「身份设定、编码风格、审查清单、架构思维、协作模式、任务工作流」等内容注入系统提示词，让同一个底层模型表现出截然不同的"性格"与工作风格。这种注入完全离线，不额外调用其他模型，只消耗 DeepSeek Token。
+**什么是原装工作流源码嵌入**：Deep-IDE 实际只调用 DeepSeek 这一个真实大模型。五种模式的**原装工作流源码节选**（Anthropic Claude Code 官方 npm 包的系统提示与工具契约、OpenAI Codex CLI 的 `gpt-5.2-codex_instructions_template.md`、Google Gemini CLI 的 `snippets.legacy.ts`、Qwen Code 的 `core/prompts.ts`、Kimi CLI 的 `soul/kimisoul.py` 等）以**编译期资源**形式嵌入（`src-tauri/src/ai/workflow_sources/*.md` + `include_str!`），与 DeepSeek 运行时真实代码强强融合，让同一个底层模型**直接执行原装工作流**，而不是模拟某种"风格"。**无 Persona 注入层**：`personas/` 目录与 Persona 加载器已整体移除，模式元数据由 `modes.rs` 静态表提供，运行时零文件 I/O。
 
 <img width="2662" height="1797" alt="image" src="https://github.com/user-attachments/assets/f008ced8-6893-44e3-840b-6a102c0fe87e" />
 <img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/3e3b4406-8ed9-4d2d-ac6e-3abed4940543" />
@@ -120,7 +120,7 @@ Deep-IDE is a next-generation agentic integrated development environment (IDE) d
 
 The core philosophy of Deep-IDE is "simple architecture, ultimate experience." The backend is built with Rust and Tauri 2, while the frontend uses Vue 3 and TypeScript, delivering near-native startup speed and extremely low memory footprint, while avoiding the bloated size and performance issues commonly associated with Electron-based applications. Whether you are a student, an independent developer, or a team engineer, Deep-IDE lets you complete the entire workflow — "create a project → edit code → AI-assisted development → run and debug → commit to version control" — all within a single window.
 
-**Development Motivation**: During real-world development, the author observed that mainstream IDEs are either bloated or have fragmented AI capabilities — users often have to switch frequently between an editor, an AI chat tool, a command-line terminal, and a file parsing tool, which is inefficient and prone to losing context. Meanwhile, although there are many AI programming assistants on the market, most require separate subscriptions per model, which is costly and stylistically rigid. The starting point of Deep-IDE was to use a "single DeepSeek runtime + offline Persona injection" architecture to unify editing, AI assistance, multi-agent tool calling, file execution, and version control within a single desktop window — allowing different model experiences to be switched with one click, customized on demand, while keeping usage cost to a minimum.
+**Development Motivation**: During real-world development, the author observed that mainstream IDEs are either bloated or have fragmented AI capabilities — users often have to switch frequently between an editor, an AI chat tool, a command-line terminal, and a file parsing tool, which is inefficient and prone to losing context. Meanwhile, although there are many AI programming assistants on the market, most require separate subscriptions per model, which is costly and stylistically rigid. The starting point of Deep-IDE was to use a "single DeepSeek runtime + embedded original workflow sources" architecture to unify editing, AI assistance, multi-agent tool calling, file execution, and version control within a single desktop window — allowing different original workflows to be switched with one click, customized on demand, while keeping usage cost to a minimum.
 
 ## 2. Core Features
 
@@ -128,7 +128,7 @@ The core philosophy of Deep-IDE is "simple architecture, ultimate experience." T
 - **Multi-tab code editor**: Ships with a CodeMirror-based editor featuring syntax highlighting, theme switching (Classic White / Eye-friendly Green / Professional Dark / GitHub Dark), and support for many programming languages.
 - **UI Skin system**: DeepKing-style "UI Skin" interface with built-in GitHub light/dark skins (covering the file tree, editor area and AI panel), plus pasting any GitHub repo URL to convert it into a custom skin.
 - **File tree and resource management**: A complete file tree browser with create, rename, delete, copy, cut, and paste operations, plus draggable panel resizing.
-- **Multi-agent AI assistant**: Five offline Persona workflows — DeepAnth, DeepOAI, DeepGem, DeepQwen, and DeepKimi — all unified through the DeepSeek large model runtime.
+- **Multi-agent AI assistant**: Five original workflows — DeepAnth, DeepOAI, DeepGem, DeepQwen, and DeepKimi — with vendored original workflow sources embedded at compile time (no Persona emulation layer), all unified through the DeepSeek large model runtime.
 - **Agent Loop tool calling**: Provides a Claude Code / Cursor-style nine-tool agent loop with real-time code reading and writing, command-line execution, and dependency installation automations.
 - **Multi-language one-click run**: Automatically detects and runs files in Python, JavaScript, TypeScript, Java, Go, Rust, C, C++, C#, PHP, SQL, MATLAB, Shell, and more.
 - **Built-in terminal**: An integrated "Terminal / Output" panel at the bottom supports command input, output viewing, and export/copy of results.
@@ -163,9 +163,9 @@ The editor supports multi-tab switching, saving, and save-as. The file tree cont
 
 ### 5.3 AI Assistant and Multiple Modes
 
-The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi). Each mode simulates a different development style through offline Persona injection, and all modes consume DeepSeek tokens.
+The AI Assistant supports five workflows (DeepAnth / DeepOAI / DeepGem / DeepQwen / DeepKimi). Each mode embeds the vendored original workflow source at compile time (no Persona emulation layer), and all modes consume DeepSeek tokens.
 
-**What is Persona injection?** Persona Injection is a prompt engineering method. Deep-IDE actually calls only one real large model — DeepSeek — but relies on local offline Persona configurations (each mode corresponds to a directory containing `persona.toml` plus multiple Markdown knowledge files) to dynamically assemble the System Prompt before every request. The prompt assembler injects "identity setting, coding style, review checklist, architectural thinking, collaboration patterns, and task workflows" into the system prompt according to their weights, making the same underlying model exhibit entirely different "personalities" and working styles. This injection is fully offline, does not call any other model, and only consumes DeepSeek tokens.
+**What is the embedded original workflow source?** Deep-IDE actually calls only one real large model — DeepSeek. The five modes' **original workflow source excerpts** (Claude Code's official system prompt & tool contracts, Codex CLI's `gpt-5.2-codex_instructions_template.md`, Gemini CLI's `snippets.legacy.ts`, Qwen Code's `core/prompts.ts`, Kimi CLI's `soul/kimisoul.py`, etc.) are embedded as compile-time resources (`src-tauri/src/ai/workflow_sources/*.md` via `include_str!`) and fused with Deep-IDE's real DeepSeek runtime code, so the same underlying model executes the **original workflows directly** instead of simulating styles. There is **no Persona injection layer**: the `personas/` directory and the Persona loader are fully removed, mode metadata comes from a static `modes.rs` table, and there is zero file I/O at runtime.
 
 <img width="2081" height="1182" alt="image" src="https://github.com/user-attachments/assets/11baf28c-4c4b-4ba2-8c00-93f1266fc9a6" />
 <img width="2683" height="1796" alt="image" src="https://github.com/user-attachments/assets/d92cbd7a-ef9e-44ff-bb5c-2f88b07d6827" />

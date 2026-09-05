@@ -43,8 +43,7 @@
       "python/Lib/site-packages/pymupdf/*.py",
       "python/Lib/site-packages/pymupdf/*.pyd",
       "python/Lib/site-packages/pymupdf/*.dll",
-      "python/Lib/site-packages/pymupdf/py.typed",
-      "../personas"
+      "python/Lib/site-packages/pymupdf/py.typed"
     ],
     "windows": {
       "nsis": {

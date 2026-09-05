@@ -1,10 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use deep_ide::{commands, cli, get_personas_dir, DeepSeekClient, PersonaLoader};
+use deep_ide::{commands, cli, DeepSeekClient};
 
 fn main() {
-    let personas_dir = get_personas_dir();
-    let persona_loader = PersonaLoader::new(personas_dir);
     let ds_client = DeepSeekClient::new();
 
     tauri::Builder::default()
@@ -12,7 +10,6 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(persona_loader)
         .manage(ds_client)
         .invoke_handler(tauri::generate_handler![
             // 项目

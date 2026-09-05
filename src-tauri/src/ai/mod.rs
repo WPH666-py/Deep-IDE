@@ -1,5 +1,5 @@
 pub mod deepseek;
-pub mod persona;
+pub mod modes;
 pub mod agents;
 pub mod hooks;
 pub mod context;
@@ -8,7 +8,7 @@ pub mod agent_loop;
 pub mod file_parser;
 
 pub use deepseek::{DeepSeekClient, DeepSeekConfig, Message, ChatResponse};
-pub use persona::{Persona, PersonaContext, PersonaLoader, PromptAssembler, TaskType, ContextFile};
+pub use modes::{ModeMeta, ContextFile, build_system_prompt, native_system_prompt, engine_info, list_modes, meta};
 pub use agents::AgentDefinition;
 pub use hooks::{SafetyHooks, HookRule, HookAction, HookResult};
 pub use context::{ContextCompressor, CompressorConfig, CompressedMessage};
